@@ -1,0 +1,23 @@
+# ---- OS junk ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- editor / IDE ----
+.vscode/
+.idea/
+*.swp
+
+# ---- build output (C/C++ 编译产物) ----
+*.exe
+*.o
+*.obj
+*.out
+Debug/
+Release/
+*.ilk
+*.pdb
+
+# ---- logs / temp ----
+*.log
+*.tmp
