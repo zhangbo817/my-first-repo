@@ -1,6 +1,14 @@
 /*
- * DEEP SPACE OUTPOST — C 语言终端版 v2「30 关 · BOSS · 机库」
+ * DEEP SPACE OUTPOST — C 语言终端版 v3「6 种 BOSS · 阶段精英 · 强化」
  * ---------------------------------------------------------------
+ * 相对 v2 的改动（与网页版同步）：
+ *   - 第 5/10/15/20/25/30 关各是一种独立 BOSS：
+ *     晶簇核心(弹幕) / 棱光之眼(激光) / 熔核巨像(陨石) /
+ *     裂空之刃(突进) / 虫巢母体(召唤) / 虚空主宰(瞬移)
+ *   - 最终 BOSS「终焉·母舰」按血量阶段解锁前面所有技能
+ *   - 每个阶段的 4 个普通关各出现 1 只阶段专属精英（同阶段 BOSS 的缩小版）
+ *   - 每关通关后弹出三选一强化（11 种，可叠加，按 1/2/3 选择）
+ *
  * 相对 v1 的改动：
  *   - 关卡固定 30 关；第 5/10/15/20/25/30 关为 BOSS 关
  *   - 30 关通关后出现「最终 BOSS · 终焉·母舰」，HP 168000
@@ -231,6 +239,25 @@ static const ShopDef SHOP_DEFS[SHOP_N] = {
     {"长管腔",     "弹速与射程",   'L', 0,  8, C_AMBER,  24.0, 1.48},
 };
 
+/* ===== 海克斯强化（每关通关三选一，可叠加） ===== */
+enum { H_DMG = 0, H_RATE, H_HP, H_CRIT, H_LINK, H_BOSS, H_GOLD, H_SPD,
+       H_MULTI, H_ARMOR, H_LEECH, HEX_N };
+typedef struct { const char *name, *desc; int rar, max; } HexDef;
+static const HexDef HEXES[HEX_N] = {
+    {"动能增强", "+15% 子弹伤害",     1, 6},
+    {"冷却回路", "-8% 射击间隔",      1, 6},
+    {"附加装甲", "+25 最大生命",      1, 6},
+    {"裂解瞄准", "+12% 暴击率",       2, 3},
+    {"穿甲弹芯", "子弹贯穿 +1",       2, 2},
+    {"猎杀协议", "对 BOSS 伤害 +25%", 2, 3},
+    {"拾荒者",   "+15% 金币获取",     1, 4},
+    {"推进优化", "+8% 移动速度",      1, 4},
+    {"多管齐射", "每次开火 +1 发",    3, 2},
+    {"相位护盾", "-15% 受到伤害",     2, 3},
+    {"吸血涂层", "击杀回复 3 点生命", 2, 3},
+};
+static const char *RAR_NAME[4] = {"", "白银", "黄金", "棱彩"};
+
 /* ===== 敌人类型（金币产出已削减） ===== */
 enum { E_GRUNT = 0, E_FAST, E_TANK, E_SPLITTER, E_ELITE, ETYPE_N };
 typedef struct {
@@ -308,6 +335,9 @@ typedef struct {
     int type, level, gold, used;
     int counts;              /* 是否计入本关 waveLeft */
     int isBoss, isFinal, stage;
+    int bkind;               /* BOSS 种类 0..6 */
+    int sei;                 /* 阶段精英类型 0..5，-1 = 普通小怪 */
+    double cd, cd2, cd3, cd4, cd5, spin, chargeT, dashT, dashVx, dashVy;
     char bossName[24];
 } Enemy;
 
@@ -317,11 +347,24 @@ typedef struct {
     unsigned int hitMask;
 } Bullet;
 
-typedef struct { double x, y, vx, vy, r, life, dmg; int used; } EBullet;
+typedef struct { double x, y, vx, vy, r, life, dmg, hom; int used; } EBullet;
 typedef struct { double x, y, vx, vy, life, phase; int value, used; } Coin;
 typedef struct { double x, y, life, phase; int used; } Pickup;
 typedef struct { double x, y, vy, life; int col, used; char text[16]; } Floater;
 typedef struct { double x, y, vx, vy, life, maxLife; int col, used; } Particle;
+
+/* 激光束（蓄力 → 扫射） */
+typedef struct {
+    double x, y, ang, rot, charge, active, dur, w, dmg;
+    int used;
+} Beam;
+/* 陨石（落点预警 → 爆炸） */
+typedef struct {
+    double tx, ty, t, dur, dmg, r;
+    int used;
+} Meteor;
+#define MAX_BEAMS 24
+#define MAX_METEORS 40
 
 /* ===== 派生属性 ===== */
 typedef struct {
@@ -353,6 +396,10 @@ typedef struct {
     int blueprint[PART_SLOTS];
     unsigned char comboSeen[32];   /* 256 种基础图纸发现位图 */
 
+    int hex[HEX_N];          /* 海克斯强化层数 */
+    int pick3;               /* 通关后正在三选一 */
+    int pickOpt[3];
+
     char banner[48];
     double bannerLife;
     int bannerCol;
@@ -367,6 +414,8 @@ static Coin     coins[MAX_COINS];         static int coinCount;
 static Pickup   pickups[MAX_PICKUPS];     static int pickupCount;
 static Floater  floaters[MAX_FLOATERS];   static int floaterCount;
 static Particle particles[MAX_PARTICLES]; static int particleCount;
+static Beam     beams[MAX_BEAMS];
+static Meteor   meteors[MAX_METEORS];
 
 static Player *pl = &P;
 
@@ -649,6 +698,19 @@ static Stats stats(void) {
     s.maxHp    *= (1.0 + jh);
     s.speedMul *= (1.0 + js);
     s.interval *= (1.0 - clampd(jr, 0.0, 0.55));
+
+    /* ---- 海克斯强化叠加 ---- */
+    s.damage   *= pow(1.15, G.hex[H_DMG]);
+    s.interval *= pow(0.92, G.hex[H_RATE]);
+    s.maxHp    += 25.0 * G.hex[H_HP];
+    s.crit     += 0.12 * G.hex[H_CRIT];
+    s.link     += G.hex[H_LINK];
+    s.bossMul  *= pow(1.25, G.hex[H_BOSS]);
+    s.goldMul  *= pow(1.15, G.hex[H_GOLD]);
+    s.speedMul *= pow(1.08, G.hex[H_SPD]);
+    s.bulletCount += G.hex[H_MULTI];
+    s.armor    = 1.0 - (1.0 - s.armor) * pow(0.85, G.hex[H_ARMOR]);
+    s.leech    += 3.0 * G.hex[H_LEECH];
     return s;
 }
 
@@ -691,48 +753,90 @@ static void spawnEnemy(int forceType, int counts) {
     e->xp = b->xp * sqrt(scale);
     e->phase = randf(0, TAU);
     e->spawnAnim = 1.0;
+    e->sei = -1;                 /* 普通小怪，不是阶段精英 */
 }
 
-static void spawnBoss(int isFinal) {
-    int idx = addEnemy(); if (idx < 0) return;
-    Enemy *e = &enemies[idx];
-    e->x = WORLD_W / 2; e->y = 110.0;
-    e->type = E_ELITE; e->level = G.wave; e->counts = 0;
-    e->isBoss = 1; e->isFinal = isFinal;
-    e->hp = e->maxHp = isFinal ? FINAL_BOSS_HP : BOSS_HP(G.wave);
-    e->speed = 0.0;
-    e->r = isFinal ? 46.0 : 34.0;
-    e->dmg = isFinal ? 34.0 : (18.0 + G.wave * 0.8);
-    e->gold = isFinal ? 3000 : (180 + G.wave * 22);
-    e->xp = isFinal ? 3000.0 : (120.0 + G.wave * 8.0);
-    e->phase = randf(0, TAU);
-    e->orbit = randf(0, TAU);
-    e->spawnAnim = 1.0;
-    e->fireCd = 1.2;
-    e->summonCd = 5.0;
-    if (isFinal) snprintf(e->bossName, sizeof(e->bossName), "终焉·母舰");
-    else snprintf(e->bossName, sizeof(e->bossName), "守卫者 Mk%d", G.wave / BOSS_EVERY);
-    G.bossAlive = 1;
-    char buf[48];
-    snprintf(buf, sizeof(buf), "BOSS · %s  HP %.0f", e->bossName, e->maxHp);
-    showBanner(buf, isFinal ? C_GOLD : C_PURPLE);
+/* ===== BOSS 种类（每 5 关一种，机制各不相同） ===== */
+static const char *BOSS_NAME[7] = {"晶簇核心","棱光之眼","熔核巨像","裂空之刃","虫巢母体","虚空主宰","终焉·母舰"};
+static const char *BOSS_TAG[7]  = {"弹幕","激光","陨石","突进","召唤","瞬移","全技能"};
+static const char  BOSS_CH[7]   = {'C','E','F','B','H','V','M'};
+static const int   BOSS_COL[7]  = {C_CYAN,C_PURPLE,C_AMBER,C_RED,C_GREEN,C_PURPLE,C_GOLD};
+static int stageOf(int wave) { return clampi((wave - 1) / BOSS_EVERY, 0, 5); }
+
+/* 阶段精英：同阶段 BOSS 的缩小版 */
+static const char *ELITE_NAME[6] = {"晶簇幼体","棱光浮游","熔渣爬行者","裂空掠袭者","虫巢孵育体","虚空残影"};
+static const int   ELITE_COL[6]  = {C_CYAN,C_PURPLE,C_AMBER,C_RED,C_GREEN,C_PURPLE};
+static const char  ELITE_CH[6]   = {'c','e','f','b','h','v'};
+static const double ELITE_HP[6]  = {0.62,0.56,0.78,0.52,0.70,0.60};
+static const double ELITE_R[6]   = {16,15,18,14,17,15};
+
+/* ---- 激光 ---- */
+static void spawnBeam(double x, double y, double ang, double rot,
+                      double charge, double dur, double w, double dmg) {
+    for (int i = 0; i < MAX_BEAMS; i++) if (!beams[i].used) {
+        Beam *b = &beams[i];
+        memset(b, 0, sizeof(Beam));
+        b->x = x; b->y = y; b->ang = ang; b->rot = rot;
+        b->charge = charge; b->dur = dur; b->w = w; b->dmg = dmg; b->used = 1;
+        return;
+    }
+}
+static void updateBeams(double dt) {
+    for (int i = 0; i < MAX_BEAMS; i++) {
+        Beam *b = &beams[i]; if (!b->used) continue;
+        if (b->charge > 0) {
+            b->charge -= dt;
+            b->ang += b->rot * dt * 0.35;
+            if (b->charge <= 0) b->active = b->dur;
+            continue;
+        }
+        if (b->active > 0) {
+            b->active -= dt;
+            b->ang += b->rot * dt;
+            double dx = cos(b->ang), dy = sin(b->ang);
+            double rx = pl->x - b->x, ry = pl->y - b->y;
+            double proj = rx * dx + ry * dy;
+            if (proj > 0) {
+                double perp = fabs(rx * -dy + ry * dx);
+                if (perp < pl->r + b->w * 0.5 && pl->invuln <= 0) damagePlayer(b->dmg);
+            }
+            if (b->active <= 0) b->used = 0;
+            continue;
+        }
+        b->used = 0;
+    }
 }
 
-static void startWave(void) {
-    G.waveTotal = 4 + G.wave / 2;
-    G.waveLeft  = G.waveTotal;
-    G.spawnTimer = 0.0;
-    G.between = 0;
-    G.bossAlive = 0;
-    if (G.wave % BOSS_EVERY == 0) {
-        G.waveLeft = 3 + G.wave / 10;
-        spawnBoss(0);
-        char buf[40]; snprintf(buf, sizeof(buf), "第 %d/%d 关 · BOSS 关", G.wave, MAX_WAVE);
-        showBanner(buf, C_PURPLE);
-    } else {
-        if (G.wave % 3 == 0) { spawnEnemy(E_ELITE, 1); G.waveLeft++; }
-        char buf[40]; snprintf(buf, sizeof(buf), "第 %d/%d 关", G.wave, MAX_WAVE);
-        showBanner(buf, C_CYAN);
+/* ---- 陨石 ---- */
+static void spawnMeteor(double dmg, double delay, double r) {
+    for (int i = 0; i < MAX_METEORS; i++) if (!meteors[i].used) {
+        Meteor *m = &meteors[i];
+        memset(m, 0, sizeof(Meteor));
+        m->tx = clampd(pl->x + randf(-85, 85), 40, WORLD_W - 40);
+        m->ty = clampd(pl->y + randf(-65, 65), 60, WORLD_H - 40);
+        m->t = -delay; m->dur = 1.0; m->dmg = dmg; m->r = r; m->used = 1;
+        return;
+    }
+}
+static void updateMeteors(double dt) {
+    for (int i = 0; i < MAX_METEORS; i++) {
+        Meteor *m = &meteors[i]; if (!m->used) continue;
+        m->t += dt;
+        if (m->t < m->dur) continue;
+        m->used = 0;
+        addParticles(m->tx, m->ty, C_AMBER, 16, 270, 0.6);
+        double rr = m->r + pl->r;
+        if (dist2(m->tx, m->ty, pl->x, pl->y) < rr * rr && pl->invuln <= 0) damagePlayer(m->dmg);
+    }
+}
+
+/* ---- 追踪弹 ---- */
+static void homingBurst(Enemy *e, int n, double dmg) {
+    double base = atan2(pl->y - e->y, pl->x - e->x);
+    for (int i = 0; i < n; i++) {
+        double a = base + (i - (n - 1) / 2.0) * 0.4;
+        int idx = addEBullet(e->x, e->y, cos(a) * 125, sin(a) * 125, dmg);
+        if (idx >= 0) ebullets[idx].hom = 1.7;
     }
 }
 
@@ -751,36 +855,321 @@ static void ringFire(Enemy *e, int count, double speed, double dmg) {
         addEBullet(e->x, e->y, cos(a) * speed, sin(a) * speed, dmg);
     }
 }
-static void updateBoss(Enemy *e, double dt) {
-    double ratio = e->hp / e->maxHp;
-    e->stage = ratio > 0.66 ? 0 : (ratio > 0.33 ? 1 : 2);
-    e->orbit += dt * (0.55 + e->stage * 0.20 + (e->isFinal ? 0.15 : 0.0));
+static void bossOrbit(Enemy *e, double dt, double mul) {
+    e->orbit += dt * (0.55 + e->stage * 0.20) * mul;
     double tx = WORLD_W / 2 + sin(e->orbit) * WORLD_W * 0.30;
-    double ty = 110.0 + sin(e->orbit * 0.7) * 45.0;
+    double ty = 130.0 + sin(e->orbit * 0.7) * 45.0;
     double k = fmin(1.0, dt * 1.6);
     e->x += (tx - e->x) * k;
     e->y += (ty - e->y) * k;
+}
 
-    e->fireCd -= dt;
-    if (e->fireCd <= 0) {
-        int cnt = 5 + e->stage * 3 + (e->isFinal ? 5 : 0);
-        double spd = 155.0 + e->stage * 32.0 + (e->isFinal ? 45.0 : 0.0);
-        bossFire(e, cnt, spd, 0.55, e->dmg * 0.55);
-        if (e->stage >= 1) {
-            ringFire(e, 8 + e->stage * 4 + (e->isFinal ? 8 : 0), spd * 0.78, e->dmg * 0.42);
-        }
-        e->fireCd = fmax(0.55, 1.55 - e->stage * 0.28 - (e->isFinal ? 0.25 : 0.0));
+/* 0 晶簇核心：扇形 + 环形 */
+static void aiCrystal(Enemy *e, double dt) {
+    bossOrbit(e, dt, 1.0);
+    e->cd -= dt;
+    if (e->cd <= 0) {
+        bossFire(e, 4 + e->stage * 2, 165 + e->stage * 28, 0.6, e->dmg * 0.48);
+        e->cd = fmax(0.8, 1.7 - e->stage * 0.3);
     }
-    if (e->isFinal) {
-        e->summonCd -= dt;
-        if (e->summonCd <= 0) {
-            for (int k2 = 0; k2 < 2; k2++) spawnEnemy(-1, 0);
-            e->summonCd = 7.0;
+    if (e->stage >= 1) {
+        e->cd2 -= dt;
+        if (e->cd2 <= 0) {
+            ringFire(e, 10 + e->stage * 4, 105 + e->stage * 18, e->dmg * 0.40);
+            e->cd2 = fmax(1.8, 2.8 - e->stage * 0.4);
+        }
+    }
+}
+/* 1 棱光之眼：蓄力激光扫射 */
+static void aiLaser(Enemy *e, double dt) {
+    bossOrbit(e, dt, 0.8);
+    e->cd -= dt;
+    if (e->cd <= 0) {
+        int n = 1 + e->stage;
+        double base = atan2(pl->y - e->y, pl->x - e->x);
+        for (int i = 0; i < n; i++)
+            spawnBeam(e->x, e->y, base + (i - (n - 1) / 2.0) * 0.6,
+                      (i % 2 ? 1 : -1) * (0.45 + e->stage * 0.25),
+                      0.85, 0.6, 14.0, 10.0 + e->stage * 3.0);
+        e->cd = fmax(1.4, 2.9 - e->stage * 0.45);
+    }
+    e->cd2 -= dt;
+    if (e->cd2 <= 0) { bossFire(e, 3, 120, 0.5, e->dmg * 0.3); e->cd2 = 2.0; }
+}
+/* 2 熔核巨像：陨石雨 */
+static void aiMeteor(Enemy *e, double dt) {
+    bossOrbit(e, dt, 0.65);
+    e->cd -= dt;
+    if (e->cd <= 0) {
+        int n = 2 + e->stage;
+        for (int i = 0; i < n; i++) spawnMeteor(10.0 + e->stage * 3.0, i * 0.22, 44.0);
+        if (e->stage >= 1) ringFire(e, 8 + e->stage * 3, 95, e->dmg * 0.35);
+        e->cd = fmax(1.6, 2.6 - e->stage * 0.35);
+    }
+}
+/* 3 裂空之刃：蓄力冲刺 */
+static void aiBlade(Enemy *e, double dt) {
+    if (e->dashT > 0) {
+        e->dashT -= dt;
+        e->x = clampd(e->x + e->dashVx * dt, 26, WORLD_W - 26);
+        e->y = clampd(e->y + e->dashVy * dt, 60, WORLD_H - 60);
+        if (dist2(e->x, e->y, pl->x, pl->y) < (e->r + pl->r) * (e->r + pl->r) && pl->invuln <= 0)
+            damagePlayer(e->dmg * 0.8);
+        if (e->dashT <= 0) ringFire(e, 12 + e->stage * 4, 140, e->dmg * 0.42);
+        return;
+    }
+    if (e->chargeT > 0) {
+        e->chargeT -= dt;
+        e->x += (pl->x - e->x) * fmin(1.0, dt * 1.2);
+        e->y += (pl->y - e->y) * fmin(1.0, dt * 1.2);
+        e->x = clampd(e->x, 60, WORLD_W - 60);
+        e->y = clampd(e->y, 70, WORLD_H - 90);
+        if (e->chargeT <= 0) {
+            double a = atan2(pl->y - e->y, pl->x - e->x);
+            double sp = 520 + e->stage * 110;
+            e->dashVx = cos(a) * sp; e->dashVy = sin(a) * sp;
+            e->dashT = 0.30 + e->stage * 0.04;
+        }
+        return;
+    }
+    bossOrbit(e, dt, 1.1);
+    e->cd -= dt;
+    if (e->cd <= 0) { e->chargeT = 0.55; e->cd = fmax(1.5, 2.8 - e->stage * 0.4); }
+}
+/* 4 虫巢母体：召唤 + 追踪弹 */
+static void aiHive(Enemy *e, double dt) {
+    bossOrbit(e, dt, 0.55);
+    e->cd -= dt;
+    if (e->cd <= 0) {
+        for (int i = 0; i < 2 + e->stage; i++) spawnEnemy(-1, 0);
+        e->cd = fmax(3.2, 5.5 - e->stage * 0.7);
+    }
+    e->cd2 -= dt;
+    if (e->cd2 <= 0) { homingBurst(e, 2 + e->stage, e->dmg * 0.38); e->cd2 = fmax(1.6, 2.6 - e->stage * 0.3); }
+}
+/* 5 虚空主宰：瞬移 + 螺旋 */
+static void aiVoid(Enemy *e, double dt) {
+    e->cd -= dt;
+    if (e->cd <= 0) {
+        e->x = randf(WORLD_W * 0.18, WORLD_W * 0.82);
+        e->y = randf(90, 210);
+        e->cd = fmax(2.4, 3.8 - e->stage * 0.4);
+        e->cd3 = 2.4;
+    }
+    if (e->cd3 > 0) {
+        e->cd3 -= dt;
+        e->cd2 -= dt;
+        if (e->cd2 <= 0) {
+            e->spin += 0.52;
+            int arms = 2 + e->stage;
+            for (int i = 0; i < arms; i++) {
+                double a = e->spin + TAU * i / arms;
+                addEBullet(e->x, e->y, cos(a) * 145, sin(a) * 145, e->dmg * 0.4);
+            }
+            e->cd2 = 0.24;
+        }
+    }
+    e->x += (pl->x - e->x) * fmin(1.0, dt * 0.35);
+    e->y += (150 - e->y) * fmin(1.0, dt * 1.2);
+    e->x = clampd(e->x, 70, WORLD_W - 70);
+    e->y = clampd(e->y, 80, 260);
+}
+/* 6 终焉·母舰：全技能 */
+static void aiFinal(Enemy *e, double dt) {
+    bossOrbit(e, dt, 0.75);
+    e->cd -= dt;
+    if (e->cd <= 0) {
+        bossFire(e, 5 + e->stage * 2, 165 + e->stage * 20, 0.55, e->dmg * 0.45);
+        e->cd = fmax(0.85, 1.6 - e->stage * 0.3);
+    }
+    e->cd2 -= dt;
+    if (e->cd2 <= 0) { homingBurst(e, 2, e->dmg * 0.35); e->cd2 = fmax(2.2, 3.4 - e->stage * 0.5); }
+    if (e->stage >= 1) {
+        e->cd3 -= dt;
+        if (e->cd3 <= 0) {
+            double base = atan2(pl->y - e->y, pl->x - e->x);
+            for (int i = 0; i < 2; i++)
+                spawnBeam(e->x, e->y, base + (i ? PI : 0), (i ? -1 : 1) * 0.5, 0.85, 0.65, 15.0, 12.0);
+            e->cd3 = 4.0;
+        }
+        e->cd4 -= dt;
+        if (e->cd4 <= 0) { spawnMeteor(10.0, 0.0, 44.0); spawnMeteor(10.0, 0.3, 44.0); e->cd4 = 3.2; }
+    }
+    if (e->stage >= 2) {
+        e->cd5 -= dt;
+        if (e->cd5 <= 0) { spawnEnemy(-1, 0); spawnEnemy(-1, 0); e->cd5 = 6.5; }
+    }
+}
+
+static void updateBoss(Enemy *e, double dt) {
+    double ratio = e->hp / e->maxHp;
+    int ns = ratio > 0.66 ? 0 : (ratio > 0.33 ? 1 : 2);
+    if (ns > e->stage) {
+        e->stage = ns;
+        char buf[48];
+        snprintf(buf, sizeof(buf), "%s · 阶段 %d", e->bossName, e->stage + 1);
+        showBanner(buf, BOSS_COL[e->bkind]);
+        addParticles(e->x, e->y, BOSS_COL[e->bkind], 26, 320, 0.8);
+    }
+    switch (e->bkind) {
+        case 0: aiCrystal(e, dt); break;
+        case 1: aiLaser(e, dt); break;
+        case 2: aiMeteor(e, dt); break;
+        case 3: aiBlade(e, dt); break;
+        case 4: aiHive(e, dt); break;
+        case 5: aiVoid(e, dt); break;
+        default: aiFinal(e, dt); break;
+    }
+}
+
+/* ===== 阶段精英小怪 ===== */
+static void spawnStageElite(int wave) {
+    int idx = addEnemy(); if (idx < 0) return;
+    Enemy *e = &enemies[idx];
+    int st = stageOf(wave);
+    const ETypeDef *b = &ETYPE[E_ELITE];
+    double scale = 1.0 + (wave - 1) * 0.17;
+    double goldScale = 1.0 + (wave - 1) * 0.10;
+    int edge = rand() % 4;
+    double m = 44.0, x = 0, y = 0;
+    if      (edge == 0) { x = randf(60, WORLD_W - 60); y = -m; }
+    else if (edge == 1) { x = WORLD_W + m;            y = randf(60, WORLD_H - 60); }
+    else if (edge == 2) { x = randf(60, WORLD_W - 60); y = WORLD_H + m; }
+    else                { x = -m;                     y = randf(60, WORLD_H - 60); }
+    e->x = x; e->y = y; e->type = E_ELITE; e->level = wave; e->counts = 1;
+    e->sei = st;
+    e->hp = e->maxHp = b->hp * scale * ELITE_HP[st];
+    e->speed = b->speed * (1.0 + (wave - 1) * 0.042);
+    e->r = ELITE_R[st];
+    e->dmg = b->dmg * (1.0 + (wave - 1) * 0.10) * 0.5;
+    e->gold = (int)(b->gold * goldScale * 3.0 + 0.5);
+    if (e->gold < 1) e->gold = 1;
+    e->xp = b->xp * sqrt(scale) * 2.2;
+    e->phase = randf(0, TAU);
+    e->spawnAnim = 1.0;
+    e->cd = 1.6;
+}
+
+static void updateStageElite(Enemy *e, double dt) {
+    if (e->sei == 3 && e->dashT > 0) {          /* 掠袭者冲刺 */
+        e->dashT -= dt;
+        e->x = clampd(e->x + e->dashVx * dt, e->r, WORLD_W - e->r);
+        e->y = clampd(e->y + e->dashVy * dt, e->r, WORLD_H - e->r);
+        if (dist2(e->x, e->y, pl->x, pl->y) < (e->r + pl->r) * (e->r + pl->r) && pl->invuln <= 0)
+            damagePlayer(e->dmg);
+        return;
+    }
+    e->cd -= dt;
+    if (e->cd > 0) return;
+    switch (e->sei) {
+        case 0: {                               /* 三向晶片 */
+            double base = atan2(pl->y - e->y, pl->x - e->x);
+            for (int i = -1; i <= 1; i++)
+                addEBullet(e->x, e->y, cos(base + i * 0.30) * 130, sin(base + i * 0.30) * 130, e->dmg * 0.55);
+            e->cd = 2.0; break;
+        }
+        case 1:                                 /* 短激光 */
+            spawnBeam(e->x, e->y, atan2(pl->y - e->y, pl->x - e->x), 0, 0.5, 0.32, 8.0, 9.0);
+            e->cd = 3.4; break;
+        case 2:                                 /* 小陨石 */
+            spawnMeteor(8.0, 0.0, 28.0); e->cd = 3.0; break;
+        case 3: {                               /* 短冲刺 */
+            double a = atan2(pl->y - e->y, pl->x - e->x);
+            e->dashVx = cos(a) * 430; e->dashVy = sin(a) * 430;
+            e->dashT = 0.22; e->cd = 2.4; break;
+        }
+        case 4:                                 /* 孵化小怪 */
+            spawnEnemy(0, 0); e->cd = 6.0; break;
+        case 5: {                               /* 瞬移 + 十字弹 */
+            e->x = clampd(pl->x + randf(-170, 170), 40, WORLD_W - 40);
+            e->y = clampd(pl->y + randf(-170, 170), 40, WORLD_H - 40);
+            for (int i = 0; i < 4; i++) {
+                double a = TAU * i / 4 + randf(0, 0.3);
+                addEBullet(e->x, e->y, cos(a) * 120, sin(a) * 120, e->dmg * 0.45);
+            }
+            e->cd = 3.6; break;
         }
     }
 }
 
+static void spawnBoss(int isFinal) {
+    int idx = addEnemy(); if (idx < 0) return;
+    Enemy *e = &enemies[idx];
+    int kind = isFinal ? 6 : clampi(G.wave / BOSS_EVERY - 1, 0, 5);
+    e->x = WORLD_W / 2; e->y = 110.0;
+    e->type = E_ELITE; e->level = G.wave; e->counts = 0;
+    e->isBoss = 1; e->isFinal = isFinal;
+    e->bkind = kind; e->sei = -1;
+    e->hp = e->maxHp = isFinal ? FINAL_BOSS_HP : BOSS_HP(G.wave);
+    e->speed = 0.0;
+    e->r = isFinal ? 46.0 : 30.0 + kind * 2.0;
+    e->dmg = isFinal ? 34.0 : (18.0 + G.wave * 0.8);
+    e->gold = isFinal ? 3000 : (180 + G.wave * 22);
+    e->xp = isFinal ? 3000.0 : (120.0 + G.wave * 8.0);
+    e->phase = randf(0, TAU);
+    e->orbit = randf(0, TAU);
+    e->spawnAnim = 1.0;
+    e->cd = 1.4; e->cd2 = 1.2; e->cd3 = 2.2; e->cd4 = 2.6; e->cd5 = 4.5;
+    e->spin = randf(0, TAU);
+    snprintf(e->bossName, sizeof(e->bossName), "%s", BOSS_NAME[kind]);
+    G.bossAlive = 1;
+    char buf[56];
+    snprintf(buf, sizeof(buf), "BOSS · %s [%s]  HP %.0f", BOSS_NAME[kind], BOSS_TAG[kind], e->maxHp);
+    showBanner(buf, BOSS_COL[kind]);
+}
+
+static void startWave(void) {
+    G.waveTotal = 4 + G.wave / 2;
+    G.waveLeft  = G.waveTotal;
+    G.spawnTimer = 0.0;
+    G.between = 0;
+    G.bossAlive = 0;
+    if (G.wave % BOSS_EVERY == 0) {
+        G.waveLeft = 3 + G.wave / 10;
+        spawnBoss(0);
+        char buf[40];
+        snprintf(buf, sizeof(buf), "第 %d/%d 关 · BOSS 关", G.wave, MAX_WAVE);
+        showBanner(buf, C_PURPLE);
+    } else {
+        int st = stageOf(G.wave);
+        spawnStageElite(G.wave);
+        G.waveLeft++;
+        char buf[48];
+        snprintf(buf, sizeof(buf), "第 %d/%d 关 · 精英 %s", G.wave, MAX_WAVE, ELITE_NAME[st]);
+        showBanner(buf, ELITE_COL[st]);
+    }
+}
+
+static void pickHex(int i) {
+    if (i < 0 || i > 2) return;
+    int id = G.pickOpt[i];
+    if (id < 0) return;
+    G.hex[id]++;
+    G.pick3 = 0;
+    char buf[48];
+    snprintf(buf, sizeof(buf), "强化 · %s", HEXES[id].name);
+    showBanner(buf, C_GOLD);
+    addFloater(pl->x, pl->y - 40, HEXES[id].name, C_GOLD);
+}
+static void offerHex(void) {
+    int opts[3], n = 0, guard = 0;
+    while (n < 3 && guard++ < 300) {
+        int id = rand() % HEX_N;
+        if (G.hex[id] >= HEXES[id].max) continue;
+        int dup = 0;
+        for (int i = 0; i < n; i++) if (opts[i] == id) dup = 1;
+        if (dup) continue;
+        opts[n++] = id;
+    }
+    if (n == 0) return;
+    while (n < 3) opts[n++] = -1;
+    for (int i = 0; i < 3; i++) G.pickOpt[i] = opts[i];
+    G.pick3 = 1;
+    if (G.selftest) pickHex(rand() % 3);      /* 无头自测自动选一个 */
+}
+
 /* ===== 掉落金币 ===== */
+
 static void dropCoins(double x, double y, int amount) {
     Stats s = stats();
     int total = (int)(amount * s.goldMul + 0.5); if (total < 1) total = 1;
@@ -928,6 +1317,7 @@ static void killEnemy(int idx) {
             c->dmg = dmg * 0.5;
             c->gold = (int)(gold * 0.4 + 0.5); if (c->gold < 1) c->gold = 1;
             c->xp = xp * 0.35; c->phase = randf(0, TAU); c->spawnAnim = 0.6;
+            c->sei = -1;
             G.waveLeft++;
         }
     }
@@ -1009,6 +1399,7 @@ static void update(double dt) {
         if (G.bannerLife > 0) G.bannerLife -= dt;
         return;
     }
+    if (G.pick3) { updateEffects(dt); if (G.bannerLife > 0) G.bannerLife -= dt; return; }
     G.t += dt;
     if (G.bannerLife > 0) G.bannerLife -= dt;
 
@@ -1082,6 +1473,18 @@ static void update(double dt) {
     /* ---- 敌方弹幕 ---- */
     for (int i = 0; i < ebulletCount; i++) {
         EBullet *b = &ebullets[i]; if (!b->used) continue;
+        if (b->hom > 0) {                       /* 追踪弹缓慢转向玩家 */
+            double cur = atan2(b->vy, b->vx);
+            double want = atan2(pl->y - b->y, pl->x - b->x);
+            double d = want - cur;
+            while (d > PI) d -= TAU;
+            while (d < -PI) d += TAU;
+            double step = b->hom * dt;
+            if (d > step) d = step; else if (d < -step) d = -step;
+            double sp = hypot(b->vx, b->vy);
+            double na = cur + d;
+            b->vx = cos(na) * sp; b->vy = sin(na) * sp;
+        }
         b->x += b->vx * dt; b->y += b->vy * dt; b->life -= dt;
         if (b->life <= 0 || b->x < -30 || b->x > WORLD_W + 30 || b->y < -30 || b->y > WORLD_H + 30) {
             b->used = 0; continue;
@@ -1092,6 +1495,9 @@ static void update(double dt) {
             b->used = 0;
         }
     }
+
+    updateBeams(dt);
+    updateMeteors(dt);
 
     /* ---- 敌人 ---- */
     int alive = 0;
@@ -1120,12 +1526,22 @@ static void update(double dt) {
             }
         }
 
+        if (e->sei >= 0) updateStageElite(e, dt);
+
         double rr = e->r + pl->r;
         if (dist2(e->x, e->y, pl->x, pl->y) < rr*rr && pl->invuln <= 0) {
             damagePlayer(e->dmg);
-            addParticles(e->x, e->y, ETYPE[e->type].col, 8, 180, 0.4);
-            if (e->counts) G.waveLeft = (G.waveLeft > 0) ? G.waveLeft - 1 : 0;
-            removeEnemy(i); alive--;
+            addParticles(e->x, e->y, e->sei >= 0 ? ELITE_COL[e->sei] : ETYPE[e->type].col, 8, 180, 0.4);
+            if (e->sei >= 0) {
+                /* 阶段精英不会同归于尽，只被弹开 */
+                double dd = hypot(e->x - pl->x, e->y - pl->y);
+                if (dd < 0.001) dd = 1;
+                e->x = clampd(pl->x + (e->x - pl->x) / dd * (rr + 6), e->r, WORLD_W - e->r);
+                e->y = clampd(pl->y + (e->y - pl->y) / dd * (rr + 6), e->r, WORLD_H - e->r);
+            } else {
+                if (e->counts) G.waveLeft = (G.waveLeft > 0) ? G.waveLeft - 1 : 0;
+                removeEnemy(i); alive--;
+            }
         }
     }
 
@@ -1183,6 +1599,7 @@ static void update(double dt) {
                 /* 30 关通关 → 最终 BOSS */
                 G.finalPhase = 1;
                 G.waveLeft = 0;
+                offerHex();
                 spawnBoss(1);
                 showBanner("最终 BOSS · 终焉·母舰", C_GOLD);
             } else {
@@ -1193,6 +1610,7 @@ static void update(double dt) {
                 char buf[28]; snprintf(buf, sizeof(buf), "+%d 过关奖励", bonus);
                 addFloater(pl->x, pl->y - 46, buf, C_GOLD);
                 showBanner("区域清除", C_CYAN);
+                offerHex();
             }
         }
     } else if (G.between) {
@@ -1254,6 +1672,21 @@ static void buildPanel(void) {
     Stats s = stats();
     for (int i = 0; i < G.rows; i++) panelLine[i][0] = '\0';
     int ln = 0;
+    if (G.pick3) {
+        snprintf(panelLine[ln++], ROWCAP, "== 强化 · 第 %d 关 ==", G.wave - 1);
+        snprintf(panelLine[ln++], ROWCAP, "选一个，永久叠加：");
+        if (ln < G.rows) panelLine[ln++][0] = '\0';
+        for (int i = 0; i < 3 && ln < G.rows - 2; i++) {
+            int id = G.pickOpt[i];
+            if (id < 0) continue;
+            const HexDef *h = &HEXES[id];
+            snprintf(panelLine[ln++], ROWCAP, " [%d] %s", i + 1, h->name);
+            snprintf(panelLine[ln++], ROWCAP, "     %s", h->desc);
+            snprintf(panelLine[ln++], ROWCAP, "     <%s> 已叠 %d", RAR_NAME[h->rar], G.hex[id]);
+            if (ln < G.rows) panelLine[ln++][0] = '\0';
+        }
+        return;
+    }
     const char *tabs[4] = {"商店", "装备", "机库", "图纸"};
     if (ln < G.rows) snprintf(panelLine[ln++], ROWCAP, "终端 // %s (Tab 切换)", tabs[G.tab]);
     if (ln < G.rows) snprintf(panelLine[ln++], ROWCAP, "------------------------------");
@@ -1405,10 +1838,15 @@ static void render(void) {
         Enemy *e = &enemies[i];
         int gx, gy; mapToCell(e->x, e->y, &gx, &gy);
         if (e->isBoss) {
-            const char *art = e->isFinal ? "<[M]>" : "<[B]>";
-            int col = e->hitFlash > 0.3 ? C_WHITE : (e->isFinal ? C_GOLD : C_PURPLE);
-            int n = (int)strlen(art);
-            for (int k = 0; k < n; k++) putCell(gx - n / 2 + k, gy, art[k], col);
+            int col = e->hitFlash > 0.3 ? C_WHITE : BOSS_COL[e->bkind];
+            putCell(gx - 1, gy, '<', col);
+            putCell(gx,     gy, BOSS_CH[e->bkind], col);
+            putCell(gx + 1, gy, '>', col);
+            if (gy > 0) putCell(gx, gy - 1, (char)('0' + e->stage + 1), col);
+        } else if (e->sei >= 0) {
+            int col = e->hitFlash > 0.3 ? C_WHITE : ELITE_COL[e->sei];
+            putCell(gx, gy, ELITE_CH[e->sei], col);
+            if (gy > 0) putCell(gx, gy - 1, '*', col);
         } else {
             int col = e->hitFlash > 0.3 ? C_WHITE : ETYPE[e->type].col;
             putCell(gx, gy, ETYPE[e->type].ch, col);
@@ -1418,6 +1856,21 @@ static void render(void) {
     for (int i = 0; i < bulletCount; i++) if (bullets[i].used) {
         int gx, gy; mapToCell(bullets[i].x, bullets[i].y, &gx, &gy);
         putCell(gx, gy, bullets[i].crit ? '*' : '-', bullets[i].crit ? C_GOLD : C_CYAN);
+    }
+    for (int i = 0; i < MAX_BEAMS; i++) if (beams[i].used) {
+        Beam *b = &beams[i];
+        int col = b->charge > 0 ? C_AMBER : C_RED;
+        char ch = b->charge > 0 ? '.' : '=';
+        for (double t = 10; t < 1400; t += 12) {
+            int gx, gy;
+            mapToCell(b->x + cos(b->ang) * t, b->y + sin(b->ang) * t, &gx, &gy);
+            putCell(gx, gy, ch, col);
+        }
+    }
+    for (int i = 0; i < MAX_METEORS; i++) if (meteors[i].used) {
+        Meteor *m = &meteors[i];
+        int gx, gy; mapToCell(m->tx, m->ty, &gx, &gy);
+        putCell(gx, gy, m->t > 0 ? 'x' : '.', C_AMBER);
     }
     {
         int gx, gy; mapToCell(pl->x, pl->y, &gx, &gy);
@@ -1476,6 +1929,7 @@ static void render(void) {
     if (G.victory) foot = ">> 通关！30 关 + 最终 BOSS 已击破 (R 重开) <<";
     else if (G.over) foot = ">> GAME OVER (R 重开) <<";
     else if (G.bannerLife > 0) foot = G.banner;
+    else if (G.pick3) foot = " >>> 按 1 / 2 / 3 选择一个强化 <<<";
     else foot = " W/A/S/D 移动  J/L 瞄准  空格 开火  C 冲刺  Tab 面板  X 退出";
     if (G.plain) printf("%s\n", foot);
     else printf("\033[%s;93m  >> %s <<\033[0m\033[K\n",
@@ -1577,6 +2031,10 @@ static void applyArrow(char d) {
 
 static void handleEdge(int ch) {
     char c = (char)ch;
+    if (G.pick3) {
+        if (c >= '1' && c <= '3') pickHex(c - '1');
+        return;
+    }
     if (c == '\t') { G.tab = (G.tab + 1) % 4; G.sel = 0; return; }
     if (c == '\n' || c == '\r') {
         if (G.tab == 0) buy(clampi(G.sel, 0, SHOP_N - 1));
@@ -1888,12 +2346,17 @@ int main(int argc, char **argv) {
 #endif
     int frames = 30000;
     int doSelftest = 0, doJetlab = 0, runFrames = 0;
+    int gWaveArg = 0, gPic3 = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--selftest")) {
             doSelftest = 1;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') frames = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
             runFrames = atoi(argv[++i]);          /* 自动化用：交互模式跑固定帧数后退出 */
+        } else if (!strcmp(argv[i], "--wave") && i + 1 < argc) {
+            gWaveArg = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--pic3")) {
+            gPic3 = 1;
         } else if (!strcmp(argv[i], "--snapshot")) {
             G.snapshot = 1; G.plain = 1;
         } else if (!strcmp(argv[i], "--jetlab")) {
@@ -1921,11 +2384,17 @@ int main(int argc, char **argv) {
     if (G.snapshot) {
         startGame();
         G.firing = 1;
+        if (gWaveArg > 0) {
+            G.wave = clampi(gWaveArg, 1, MAX_WAVE);
+            for (int i = 0; i < enemyCount; i++) enemies[i].used = 0;
+            startWave();
+        }
         for (int f = 0; f < 150; f++) {
             /* 快照也让准星朝上，便于看到 BOSS 与弹幕 */
             pl->aimAngle = -PI / 2;
             update(1.0 / 30.0);
         }
+        if (gPic3) offerHex();
         render();
         return 0;
     }
