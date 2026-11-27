@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#04060d" />
 <title>深空前哨 · DEEP SPACE OUTPOST</title>
 <style>
   :root{
@@ -176,6 +179,104 @@
     .hexcards{gap:10px}
     .hcard{width:46%;min-height:200px}
   }
+  /* =====================================================================
+     移动端 / 触屏适配（只在 body.touch 时生效，桌面端完全不受影响）
+     ===================================================================== */
+  html,body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+  body.touch{-webkit-user-select:none;user-select:none;touch-action:none}
+  body.touch #wrap{position:fixed;inset:0;height:100%}
+  body.touch #stage canvas{cursor:default;touch-action:none}
+  body.touch #hint{display:none}   /* 开局菜单已经讲过操作了，避免挡住顶部关卡文字 */
+
+  /* --- 触屏操作层 --- */
+  #tctrl{position:absolute;inset:0;display:none;z-index:15;pointer-events:none}
+  body.touch #tctrl{display:block}
+  #joyzone{position:absolute;left:0;bottom:0;width:46%;height:76%;
+    pointer-events:auto;touch-action:none}
+
+  .tbtn{position:absolute;border-radius:50%;pointer-events:auto;touch-action:none;
+    display:none;align-items:center;justify-content:center;flex-direction:column;gap:2px;
+    font-family:inherit;color:#e6fbff;padding:0;margin:0;overflow:hidden;
+    border:1.5px solid rgba(95,240,255,.45);
+    background:radial-gradient(circle at 50% 34%,rgba(95,240,255,.28),rgba(7,16,29,.74) 72%);
+    box-shadow:0 0 26px rgba(95,240,255,.22),0 10px 26px rgba(0,0,0,.5),
+               0 0 0 1px rgba(255,255,255,.07) inset;
+    transition:transform .07s ease, box-shadow .1s ease, background .1s ease}
+  body.touch .tbtn{display:flex}
+  .tbtn .ic{font-size:23px;line-height:1;opacity:.95}
+  .tbtn .lb{font-size:10.5px;letter-spacing:1px;line-height:1;opacity:.85}
+  .tbtn.on{transform:scale(.93);
+    background:radial-gradient(circle at 50% 34%,rgba(95,240,255,.62),rgba(24,72,96,.9) 72%);
+    box-shadow:0 0 40px rgba(95,240,255,.6),0 0 0 1px rgba(255,255,255,.22) inset}
+  .tbtn:active{transform:scale(.93)}
+
+  #btnFire{right:max(16px,env(safe-area-inset-right));
+    bottom:max(14px,env(safe-area-inset-bottom));width:98px;height:98px}
+  #btnFire .ic{font-size:30px}
+  #btnDash{right:calc(max(16px,env(safe-area-inset-right)) + 106px);
+    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 20px);width:64px;height:64px}
+
+  /* --- 顶部按钮重排：商店挪到左上角 --- */
+  body.touch #topright{left:max(10px,env(safe-area-inset-left));
+    right:auto;top:max(10px,env(safe-area-inset-top))}
+  body.touch #shopBtn{position:relative;width:58px;height:58px;padding:0;border-radius:18px;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;
+    font-size:12px;letter-spacing:.5px;line-height:1.15;text-align:center;
+    border-color:rgba(95,240,255,.42);
+    background:linear-gradient(180deg,rgba(20,44,70,.94),rgba(7,14,26,.94));
+    box-shadow:0 0 22px rgba(95,240,255,.18),0 8px 22px rgba(0,0,0,.45)}
+  body.touch #shopBtn kbd{display:none}
+  body.touch #shopBtn .dot{position:absolute;top:6px;right:8px;margin:0;font-size:12px}
+  #topright2{position:absolute;right:max(10px,env(safe-area-inset-right));
+    top:max(10px,env(safe-area-inset-top));display:none;z-index:20}
+  body.touch #topright2{display:flex;gap:8px}
+  body.touch #pauseBtn{width:46px;height:46px;padding:0;border-radius:14px;
+    font-size:15px;letter-spacing:1px}
+
+  /* 竖屏提示 */
+  #rotateTip{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:70;
+    display:none;padding:6px 15px;border-radius:999px;font-size:11.5px;
+    color:#bfe9ff;background:rgba(9,18,31,.88);border:1px solid #24425f;
+    pointer-events:none;white-space:nowrap;letter-spacing:.5px;
+    animation:tipFade 10s ease-out forwards}
+  @keyframes tipFade{0%{opacity:0}6%,55%{opacity:1}100%{opacity:0;visibility:hidden}}
+  @media (orientation:portrait){
+    body.touch #rotateTip{display:block;top:auto;bottom:176px}
+  }
+
+  /* --- 弹窗在手机上铺满、加大点击热区 --- */
+  body.touch .modal{touch-action:pan-y}
+  body.touch .mpanel{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;
+    border-radius:0;border-left:none;border-right:none}
+  body.touch .mhead{padding:10px 14px 6px}
+  body.touch .mtitle small{display:none}
+  body.touch .mclose{width:38px;height:38px;font-size:16px}
+  body.touch .tabs{flex-wrap:wrap;gap:6px;padding:8px 10px 2px}
+  body.touch .tabs button{flex:1 0 30%;padding:10px 0;font-size:13px}
+  body.touch #tabbody{padding:2px 12px 12px;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+  body.touch .row{padding:11px 9px}
+  body.touch .row:hover{background:transparent;border-color:transparent}
+  body.touch .nm{font-size:13.5px}
+  body.touch .ef{font-size:12px}
+  body.touch .pr{font-size:12.5px}
+  body.touch .chips{gap:8px}
+  body.touch .chip{padding:11px 2px;font-size:12.5px}
+  body.touch .btns{gap:8px}
+  body.touch .btns button{padding:13px 4px;font-size:13px}
+  body.touch .pfoot{font-size:11.5px;padding:8px 12px;
+    padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  body.touch .hexpanel{width:100vw;max-height:100dvh;overflow-y:auto;
+    padding:14px 8px;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+  body.touch .hexhead h2{font-size:21px;letter-spacing:6px}
+  body.touch .hexhead p{font-size:11.5px}
+  body.touch .hexcards{gap:10px;margin-top:14px}
+  body.touch .hcard{width:min(262px,44vw);min-height:0;padding:14px}
+  body.touch .hexhint{margin-top:10px;font-size:11px}
+  body.touch #overlay{padding:14px}
+  body.touch .card{max-width:92vw;padding:22px 18px}
+  body.touch .card h1{font-size:25px;letter-spacing:4px}
+  body.touch .card .keys{font-size:12px;gap:6px 14px}
+  body.touch .big{padding:14px 40px;font-size:14px}
 </style>
 </head>
 <body>
@@ -184,10 +285,21 @@
     <canvas id="cv"></canvas>
     <div id="hint">WASD 移动 · 鼠标瞄准 · 左键开火 · Shift 冲刺 · Tab 商店</div>
     <div id="topright">
-      <button id="shopBtn" class="hbtn">补给站<kbd>Tab</kbd><span class="dot" id="shopDot"></span></button>
+      <button id="shopBtn" class="hbtn">商店<kbd>Tab</kbd><span class="dot" id="shopDot"></span></button>
+    </div>
+
+    <!-- 触屏操作层：左侧摇杆 / 右侧攻击·冲刺 -->
+    <div id="tctrl">
+      <div id="joyzone"></div>
+      <button class="tbtn" id="btnDash" aria-label="冲刺"><span class="ic">&#187;</span><span class="lb">冲刺</span></button>
+      <button class="tbtn" id="btnFire" aria-label="攻击"><span class="ic">&#10022;</span><span class="lb">攻击</span></button>
+    </div>
+    <div id="topright2">
+      <button class="hbtn" id="pauseBtn" aria-label="暂停">&#10073;&#10073;</button>
     </div>
   </div>
 </div>
+<div id="rotateTip">建议横屏游玩 · 视野更开阔</div>
 
 <!-- 商店 / 强化 / 机库 / 图纸 -->
 <div id="shopModal" class="modal">
@@ -1614,8 +1726,9 @@ function update(dt) {
   if (keys['s']) my += 1;
   if (keys['a']) mx -= 1;
   if (keys['d']) mx += 1;
+  if (TOUCH && touchMove.active) { mx = touchMove.x; my = touchMove.y; }
   const ml = Math.hypot(mx, my);
-  if (ml > 0) { mx /= ml; my /= ml; }
+  if (ml > 1) { mx /= ml; my /= ml; }   /* 键盘斜向归一化，摇杆保留 0~1 的模拟量 */
   const spd = 235 * s.speedMul;
 
   if (P.dashTime > 0) {
@@ -1644,7 +1757,18 @@ function update(dt) {
   P.y = clamp(P.y, P.r, WORLD_H - P.r);
 
   /* --- 瞄准 --- */
-  if (mouseAim && mouse.inside && !G.autotest) {
+  if (TOUCH) {
+    /* 手机没有鼠标：自动锁定最近的敌人（王者荣耀式普攻），没有敌人时朝摇杆方向 */
+    let best = null, bd = 470 * 470;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const d = dist2(e.x, e.y, P.x, P.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    if (best) P.aimAngle = Math.atan2(best.y - P.y, best.x - P.x);
+    else if (touchMove.active) P.aimAngle = Math.atan2(touchMove.y, touchMove.x);
+    mouseAim = false;
+  } else if (mouseAim && mouse.inside && !G.autotest) {
     P.aimAngle = Math.atan2(mouse.wy - P.y, mouse.wx - P.x);
   }
   if (keys['j']) { P.aimAngle -= 1.8 * dt; mouseAim = false; }
@@ -1661,7 +1785,7 @@ function update(dt) {
   P.dashCd = Math.max(0, P.dashCd - dt);
   P.invuln = Math.max(0, P.invuln - dt);
 
-  if (G.autoFire || keys[' '] || mouse.down || G.autotest) fire();
+  if (G.autoFire || keys[' '] || mouse.down || G.autotest || touchFire) fire();
   updatePet(dt);
 
   /* --- 我方子弹 --- */
@@ -1877,6 +2001,7 @@ function updateEffects(dt) {
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 let VW = 800, VH = 600, DPR = 1, scale = 1, ox = 0, oy = 0;
+let HUD_X = 16;                 /* 触屏下 HUD 左边界，避开左上角商店按钮 */
 const glowCache = new Map();
 
 function makeGlow(col) {
@@ -1924,6 +2049,16 @@ function resize() {
   scale = Math.min(VW / WORLD_W, VH / WORLD_H);
   ox = (VW - WORLD_W * scale) / 2;
   oy = (VH - WORLD_H * scale) / 2;
+
+  /* 触屏：让 HUD 左边界避开左上角的商店按钮 */
+  HUD_X = 16;
+  if (document.body.classList.contains('touch')) {
+    const tr = document.getElementById('topright');
+    if (tr) {
+      const br = tr.getBoundingClientRect();
+      HUD_X = Math.max(16, Math.round(br.right + 8));
+    }
+  }
 }
 
 function circlePath(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
@@ -2741,7 +2876,8 @@ function drawPlayer() {
     ctx.globalAlpha = 1;
   }
   /* 尾焰 */
-  const moving = keys['w'] || keys['a'] || keys['s'] || keys['d'] || P.dashTime > 0;
+  const moving = keys['w'] || keys['a'] || keys['s'] || keys['d'] || P.dashTime > 0 ||
+                 (TOUCH && touchMove.active);
   if (moving) {
     const back = P.aimAngle + Math.PI;
     for (let i = 0; i < 3; i++) {
@@ -2769,62 +2905,83 @@ function drawHUD() {
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, VW, VH);
 
-  /* HP */
-  const hpw = 230, hph = 9;
+  /* HP / XP / 金币 —— 触屏时整体右移，把左上角让给「商店」按钮 */
+  const M = TOUCH;
+  const hx = M ? HUD_X : pad;
+  const hy = M ? 14 : pad;
+  const hpw = M ? Math.min(186, Math.max(104, VW * .22)) : 230, hph = 9;
+  const phh = M ? hph + 58 : hph + 52;
   ctx.fillStyle = 'rgba(4,8,16,.72)';
-  ctx.fillRect(pad - 6, pad - 6, hpw + 12, hph + 52);
+  ctx.fillRect(hx - 6, hy - 6, hpw + 12, phh);
   ctx.strokeStyle = 'rgba(95,240,255,.14)';
-  ctx.strokeRect(pad - 6.5, pad - 6.5, hpw + 13, hph + 53);
+  ctx.strokeRect(hx - 6.5, hy - 6.5, hpw + 13, phh + 1);
   ctx.fillStyle = 'rgba(255,255,255,.10)';
-  ctx.fillRect(pad, pad, hpw, hph);
+  ctx.fillRect(hx, hy, hpw, hph);
   const hpr = clamp(P.hp / P.maxHp, 0, 1);
-  const hg = ctx.createLinearGradient(pad, 0, pad + hpw, 0);
+  const hg = ctx.createLinearGradient(hx, 0, hx + hpw, 0);
   hg.addColorStop(0, hpr > .3 ? '#39d98a' : '#ff5f6d');
   hg.addColorStop(1, hpr > .3 ? '#7ff4b0' : '#ff9a6d');
   ctx.fillStyle = hg;
-  ctx.fillRect(pad, pad, hpw * hpr, hph);
+  ctx.fillRect(hx, hy, hpw * hpr, hph);
 
   /* XP */
   const need = xpNeed(G.level);
   ctx.fillStyle = 'rgba(255,255,255,.08)';
-  ctx.fillRect(pad, pad + hph + 5, hpw, 4);
+  ctx.fillRect(hx, hy + hph + 5, hpw, 4);
   ctx.fillStyle = '#b06cff';
-  ctx.fillRect(pad, pad + hph + 5, hpw * clamp(G.xp / need, 0, 1), 4);
+  ctx.fillRect(hx, hy + hph + 5, hpw * clamp(G.xp / need, 0, 1), 4);
 
-  ctx.font = '600 12px "Segoe UI",system-ui,sans-serif';
+  ctx.font = '600 ' + (M ? 11 : 12) + 'px "Segoe UI",system-ui,sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#dff1ff';
-  ctx.fillText('HP ' + Math.ceil(P.hp) + '/' + Math.round(P.maxHp), pad + 4, pad + hph + 22);
+  ctx.fillText(M ? (Math.ceil(P.hp) + ' / ' + Math.round(P.maxHp))
+                 : ('HP ' + Math.ceil(P.hp) + '/' + Math.round(P.maxHp)),
+               hx + 4, hy + hph + 22);
   ctx.fillStyle = '#b06cff';
-  ctx.fillText('LV ' + G.level, pad + 120, pad + hph + 22);
-  if (G.autoFire) {
+  ctx.textAlign = M ? 'right' : 'left';
+  ctx.fillText('LV ' + G.level, M ? hx + hpw - 4 : hx + 120, hy + hph + 22);
+  if (G.autoFire && !M) {
     ctx.textAlign = 'left';
     ctx.font = '700 11px "Segoe UI",system-ui,sans-serif';
     ctx.fillStyle = 'rgba(95,240,255,.95)';
-    ctx.fillText('● 连发', pad + 176, pad + hph + 22);
+    ctx.fillText('● 连发', hx + 176, hy + hph + 22);
   }
 
-  /* 顶部中间：关卡 */
-  ctx.textAlign = 'center';
-  ctx.font = '600 13px "Segoe UI",system-ui,sans-serif';
+  /* 顶部中间：关卡（竖屏时右对齐，避开左边的血量板） */
+  const PORTRAIT = M && VH > VW;
+  ctx.font = '600 ' + (M ? 12 : 13) + 'px "Segoe UI",system-ui,sans-serif';
   ctx.fillStyle = '#8fb4d8';
   const waveTxt = G.finalPhase ? '最终 BOSS' : '第 ' + G.wave + ' / ' + MAX_WAVE + ' 关';
-  ctx.fillText(waveTxt + (G.waveLeft > 0 ? '   剩余 ' + G.waveLeft : '   区域清除'), VW / 2, pad + 12);
+  if (PORTRAIT) {
+    ctx.textAlign = 'right';
+    ctx.fillText(waveTxt + (G.waveLeft > 0 ? '  剩' + G.waveLeft : ''), VW - 66, pad + 8);
+  } else {
+    ctx.textAlign = 'center';
+    ctx.fillText(waveTxt + (G.waveLeft > 0 ? '   剩余 ' + G.waveLeft : '   区域清除'),
+                 VW / 2, pad + 12);
+  }
 
   /* 金币 / 击杀（放左上，右上留给按钮） */
   ctx.textAlign = 'left';
   ctx.font = '700 13px "Segoe UI",system-ui,sans-serif';
   ctx.fillStyle = '#ffd75f';
-  ctx.fillText(G.gold + ' $', pad + 4, pad + hph + 40);
+  ctx.fillText(M ? ('$' + G.gold) : (G.gold + ' $'), hx + 4, hy + hph + 40);
   ctx.font = '600 11.5px "Segoe UI",system-ui,sans-serif';
   ctx.fillStyle = '#8fb4d8';
-  ctx.fillText('击杀 ' + G.kills + ' · 分数 ' + nf(G.score), pad + 96, pad + hph + 40);
+  if (M) {
+    ctx.textAlign = 'right';
+    ctx.fillText('击杀 ' + G.kills, hx + hpw - 4, hy + hph + 40);
+  } else {
+    ctx.fillText('击杀 ' + G.kills + ' · 分数 ' + nf(G.score), hx + 96, hy + hph + 40);
+  }
 
   /* BOSS 血条 */
   const boss = enemies.find(e => e.isBoss && !e.dead);
   if (boss) {
     const bdef = BOSS_DEFS[boss.bkind] || BOSS_DEFS[0];
-    const bw = Math.min(520, VW * .46), bx = (VW - bw) / 2, by = pad + 30;
+    const bw = M ? Math.min(430, VW * .54) : Math.min(520, VW * .46);
+    const bx = (VW - bw) / 2;
+    const by = M ? VH - 76 : pad + 30;
     const r = clamp(boss.hp / boss.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(4,8,16,.78)';
     ctx.fillRect(bx - 8, by - 7, bw + 16, 38);
@@ -2864,6 +3021,62 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(255,60,80,' + (flash * .35) + ')';
     ctx.fillRect(0, 0, VW, VH);
   }
+
+  /* 触屏摇杆画在最上层 */
+  if (TOUCH) drawJoystick();
+}
+
+/* --- 手机虚拟摇杆 --- */
+function drawJoystick() {
+  const R = joy.R || 62;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  if (!joy.active) {
+    /* 未按下时左下角留一个淡提示环 */
+    const bx = R + 26, by = VH - R - 26;
+    ctx.globalAlpha = .26;
+    ctx.strokeStyle = '#7fdcff'; ctx.lineWidth = 1.6;
+    circlePath(bx, by, R); ctx.stroke();
+    ctx.globalAlpha = .16;
+    circlePath(bx, by, R * .44); ctx.stroke();
+    ctx.globalAlpha = .40;
+    ctx.font = '600 10.5px "Segoe UI",system-ui,sans-serif';
+    ctx.fillStyle = '#9fe6ff';
+    ctx.fillText('拖动移动', bx, by);
+    ctx.restore();
+    return;
+  }
+
+  const bx = joy.bx, by = joy.by;
+  /* 底盘 */
+  const g = ctx.createRadialGradient(bx, by, 0, bx, by, R);
+  g.addColorStop(0, 'rgba(95,240,255,.14)');
+  g.addColorStop(.7, 'rgba(95,240,255,.05)');
+  g.addColorStop(1, 'rgba(95,240,255,.01)');
+  ctx.fillStyle = g;
+  circlePath(bx, by, R); ctx.fill();
+  ctx.strokeStyle = 'rgba(95,240,255,.55)'; ctx.lineWidth = 2;
+  circlePath(bx, by, R); ctx.stroke();
+  ctx.strokeStyle = 'rgba(95,240,255,.16)'; ctx.lineWidth = 1;
+  circlePath(bx, by, R * .55); ctx.stroke();
+
+  /* 方向指示 */
+  const dx = joy.kx - bx, dy = joy.ky - by;
+  ctx.strokeStyle = 'rgba(95,240,255,.40)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(joy.kx, joy.ky); ctx.stroke();
+
+  /* 摇杆头 */
+  const kr = R * .42;
+  const kg = ctx.createRadialGradient(joy.kx, joy.ky - kr * .35, 1, joy.kx, joy.ky, kr);
+  kg.addColorStop(0, '#f2ffff');
+  kg.addColorStop(.55, '#8fe9ff');
+  kg.addColorStop(1, '#2f8fb0');
+  ctx.fillStyle = kg;
+  circlePath(joy.kx, joy.ky, kr); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
+  circlePath(joy.kx, joy.ky, kr); ctx.stroke();
+  ctx.restore();
 }
 
 /* --- BOSS 激光 / 陨石 --- */
@@ -3054,6 +3267,125 @@ const keys = Object.create(null);
 let mouseAim = true;
 const mouse = { x: 0, y: 0, wx: 0, wy: 0, inside: false, down: false };
 
+/* ---------------- 触屏（手游）输入 ---------------- */
+const TOUCH = (() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('touch') === '1') return true;      /* 调试：强制开启 */
+  if (q.get('touch') === '0') return false;     /* 调试：强制关闭 */
+  return matchMedia('(pointer:coarse) and (hover:none)').matches;
+})();
+
+/* 摇杆输出的方向向量（长度 0~1，可做缓速移动） */
+const touchMove = { x: 0, y: 0, active: false };
+const joy = { active: false, id: null, bx: 0, by: 0, kx: 0, ky: 0, R: 62 };
+let touchFire = false;                          /* 右侧攻击键按住时为 true */
+
+function joyRadius() { return Math.round(Math.min(74, Math.min(VW, VH) * .17)); }
+
+function updateJoy(cx, cy) {
+  const R = joy.R;
+  const dx = cx - joy.bx, dy = cy - joy.by;
+  const d = Math.hypot(dx, dy);
+  const k = d > R ? R / d : 1;
+  joy.kx = joy.bx + dx * k;
+  joy.ky = joy.by + dy * k;
+  const mag = Math.min(d / R, 1);
+  if (d < 2 || mag < .16) {                     /* 死区，避免手抖乱走 */
+    touchMove.x = 0; touchMove.y = 0; touchMove.active = false; return;
+  }
+  touchMove.x = dx / d * mag;
+  touchMove.y = dy / d * mag;
+  touchMove.active = true;
+}
+
+function joyRelease() {
+  joy.active = false; joy.id = null;
+  touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
+}
+
+/* 按住类按钮：按下触发 on，抬起/取消触发 off */
+function bindHold(el, on, off) {
+  if (!el) return;
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); audioInit(); on();
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  const up = () => { off(); };
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('lostpointercapture', up);
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+function initTouchUI() {
+  if (!TOUCH) return;
+  document.body.classList.add('touch');
+
+  const hint = document.getElementById('hint');
+  if (hint) hint.textContent = '左摇杆移动 · 右攻击键开火 · 冲刺键闪避 · 左上角商店';
+  const hh = document.querySelector('.hexhint');
+  if (hh) hh.textContent = '点一下卡片即可选中';
+
+  const zone = document.getElementById('joyzone');
+  const fireBtn = document.getElementById('btnFire');
+  const dashBtn = document.getElementById('btnDash');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  /* --- 摇杆：左边任意位置按下即生成摇杆 --- */
+  zone.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (joy.active) return;
+    audioInit();
+    if (G.paused && G.started && !G.over && !G.victory) resume();
+    joy.active = true; joy.id = e.pointerId;
+    joy.R = joyRadius();
+    const r = cv.getBoundingClientRect();
+    joy.bx = e.clientX - r.left;
+    joy.by = e.clientY - r.top;
+    joy.kx = joy.bx; joy.ky = joy.by;
+    touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
+    try { zone.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  zone.addEventListener('pointermove', e => {
+    if (!joy.active || e.pointerId !== joy.id) return;
+    e.preventDefault();
+    const r = cv.getBoundingClientRect();
+    updateJoy(e.clientX - r.left, e.clientY - r.top);
+  });
+  zone.addEventListener('pointerup', e => { if (e.pointerId === joy.id) joyRelease(); });
+  zone.addEventListener('pointercancel', e => { if (e.pointerId === joy.id) joyRelease(); });
+  zone.addEventListener('lostpointercapture', e => { if (e.pointerId === joy.id) joyRelease(); });
+
+  /* --- 攻击键：按住持续开火 --- */
+  bindHold(fireBtn,
+    () => {
+      touchFire = true; fireBtn.classList.add('on');
+      if (G.paused && G.started && !G.over && !G.victory) resume();
+    },
+    () => { touchFire = false; fireBtn.classList.remove('on'); });
+
+  /* --- 冲刺键 --- */
+  bindHold(dashBtn,
+    () => { dashBtn.classList.add('on'); dash(); },
+    () => dashBtn.classList.remove('on'));
+
+  /* --- 暂停键 --- */
+  if (pauseBtn) pauseBtn.addEventListener('click', e => {
+    e.preventDefault(); audioInit(); togglePause();
+  });
+
+  /* 画布空白处点一下也能从暂停恢复 */
+  cv.addEventListener('pointerdown', () => {
+    if (G.paused && G.started && !G.over && !G.victory) resume();
+  });
+
+  /* 切到后台自动松手，避免回来还在往前冲 */
+  window.addEventListener('blur', joyRelease);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { joyRelease(); touchFire = false; }
+  });
+}
+
 function screenToWorld(cx, cy) {
   const r = cv.getBoundingClientRect();
   mouse.wx = (cx - r.left - ox) / scale;
@@ -3066,6 +3398,7 @@ cv.addEventListener('mousemove', e => {
 });
 cv.addEventListener('mouseleave', () => { mouse.inside = false; });
 cv.addEventListener('mousedown', e => {
+  if (TOUCH) return;                  /* 触屏走虚拟按键，不要被合成的鼠标事件干扰 */
   if (e.button === 0) {
     mouse.down = true;
     screenToWorld(e.clientX, e.clientY);
@@ -3084,7 +3417,8 @@ function dash() {
   if (keys['s']) dy += 1;
   if (keys['a']) dx -= 1;
   if (keys['d']) dx += 1;
-  if (dx === 0 && dy === 0) { dx = Math.cos(P.aimAngle); dy = Math.sin(P.aimAngle); }
+  if (TOUCH && touchMove.active) { dx = touchMove.x; dy = touchMove.y; }
+  if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) { dx = Math.cos(P.aimAngle); dy = Math.sin(P.aimAngle); }
   const l = Math.hypot(dx, dy) || 1;
   P.dashDx = dx / l; P.dashDy = dy / l;
   P.dashTime = .16;
@@ -3163,6 +3497,7 @@ const shopDot = document.getElementById('shopDot');
 
 function openShop() {
   if (G.hexOpen) return;
+  if (TOUCH) joyRelease();   /* 松手，别让摇杆卡住 */
   G.shopOpen = true;
   shopModal.classList.add('show');
   buildPanel();
@@ -3687,15 +4022,19 @@ function showOverlay(mode) {
   overlayMode = mode;
   overlay.classList.add('show');
   if (mode === 'start') {
+    const keyHtml = TOUCH
+      ? '<div><b>左摇杆</b>拖动移动</div><div><b>自动锁定</b>瞄准</div>' +
+        '<div><b>右下角攻击</b>按住开火</div><div><b>冲刺键</b>闪避无敌</div>' +
+        '<div><b>左上角</b>商店 / 机库</div><div><b>右上角 ‖</b>暂停</div>'
+      : '<div><b>WASD</b>移动</div><div><b>鼠标</b>瞄准</div>' +
+        '<div><b>左键 / 空格</b>开火</div><div><b>Shift</b>冲刺闪避</div>' +
+        '<div><b>Tab</b>切换面板</div><div><b>↑↓ / 点击</b>选择购买</div>' +
+        '<div><b>B / G / F</b>组装 · 随机 · 融合</div><div><b>R / P</b>重开 / 暂停</div>';
     card.innerHTML =
       '<h1>深空前哨</h1><h2>DEEP SPACE OUTPOST · 30 关 · BOSS · 机库</h2>' +
       '<p>守到最后一关，击破「终焉·母舰」。</p>' +
-      '<div class="keys">' +
-      '<div><b>WASD</b>移动</div><div><b>鼠标</b>瞄准</div>' +
-      '<div><b>左键 / 空格</b>开火</div><div><b>Shift</b>冲刺闪避</div>' +
-      '<div><b>Tab</b>切换面板</div><div><b>↑↓ / 点击</b>选择购买</div>' +
-      '<div><b>B / G / F</b>组装 · 随机 · 融合</div><div><b>R / P</b>重开 / 暂停</div>' +
-      '</div><button class="big" id="btnStart">开始游戏</button>';
+      '<div class="keys">' + keyHtml + '</div>' +
+      '<button class="big" id="btnStart">开始游戏</button>';
     document.getElementById('btnStart').onclick = startFromMenu;
   } else if (mode === 'dead') {
     card.innerHTML =
@@ -3722,13 +4061,16 @@ function showOverlay(mode) {
       '<button class="big" id="btnAgain2">再来一局 (R)</button>';
     document.getElementById('btnAgain2').onclick = restart;
   } else if (mode === 'pause') {
+    const keyHtml = TOUCH
+      ? '<div><b>左摇杆</b>移动</div><div><b>攻击键</b>开火</div>' +
+        '<div><b>冲刺键</b>闪避</div><div><b>左上角</b>商店</div>'
+      : '<div><b>WASD</b>移动</div><div><b>鼠标</b>瞄准</div>' +
+        '<div><b>左键 / 空格</b>开火</div><div><b>Shift</b>冲刺</div>' +
+        '<div><b>Tab</b>面板</div><div><b>M</b>静音</div>';
     card.innerHTML =
       '<h1 style="font-size:24px;letter-spacing:4px">暂停</h1><h2>PAUSED</h2>' +
-      '<div class="keys">' +
-      '<div><b>WASD</b>移动</div><div><b>鼠标</b>瞄准</div>' +
-      '<div><b>左键 / 空格</b>开火</div><div><b>Shift</b>冲刺</div>' +
-      '<div><b>Tab</b>面板</div><div><b>M</b>静音</div>' +
-      '</div><button class="big" id="btnResume">继续 (P)</button>';
+      '<div class="keys">' + keyHtml + '</div>' +
+      '<button class="big" id="btnResume">继续 (P)</button>';
     document.getElementById('btnResume').onclick = resume;
   }
 }
@@ -3793,6 +4135,10 @@ function startLoop() {
   requestAnimationFrame(loop);
 }
 window.addEventListener('resize', () => { resize(); });
+window.addEventListener('orientationchange', () => {
+  joyRelease();
+  setTimeout(resize, 260);          /* 等浏览器把新尺寸算完再重算缩放 */
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && G.started && !G.paused && !G.over && !G.victory) togglePause();
 });
@@ -3804,6 +4150,7 @@ const params = new URLSearchParams(location.search);
 const hintEl = document.getElementById('hint');
 
 function boot() {
+  initTouchUI();
   resize();
   startGame(false);
   G.started = false;      /* 等玩家点「开始游戏」 */

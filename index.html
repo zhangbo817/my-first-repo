@@ -82,6 +82,30 @@
     position:absolute; bottom:14px; left:0; right:0; text-align:center;
     font-size:11px; color:#31465f; letter-spacing:1px;
   }
+  .mobile-tip{
+    margin:16px 0 0; padding-top:13px; font-size:12px; line-height:1.75; color:#7fa8cc;
+    border-top:1px dashed #1b2f4d;
+  }
+  /* 手机 / 小平板：改成可滚动，别把内容裁掉 */
+  @media (max-width:560px), (max-height:560px){
+    body{display:block; overflow-y:auto; padding:18px 0}
+    main{margin:0 auto; padding:24px 18px; border-radius:16px}
+    h1{font-size:28px; letter-spacing:8px}
+    .en{font-size:10px; letter-spacing:3px}
+    .badge{font-size:9.5px; letter-spacing:1.8px; margin-bottom:14px}
+    .desc{font-size:12.5px; margin-top:14px}
+    .btn{padding:13px 40px; margin-top:18px; font-size:14px}
+    .mobile-tip{font-size:11.5px}
+    .links{flex-wrap:wrap; gap:12px; margin-top:16px; font-size:12px}
+    .feat{margin-top:18px}
+    footer{position:static; margin-top:16px; padding:0 16px}
+  }
+  @media (max-width:560px) and (orientation:landscape){
+    body{padding:10px 0}
+    main{padding:18px 16px}
+    h1{font-size:24px; letter-spacing:6px}
+    .mobile-tip{display:none}
+  }
 </style>
 </head>
 <body>
@@ -96,6 +120,9 @@
     30 关 · <b>6 场 BOSS</b> 战 · 16 件装备 · 机库 <b>256</b> 种图纸
   </p>
   <a class="btn" href="./game/game.html">开始游戏</a>
+  <p class="mobile-tip">
+    手机 / 平板直接点上面按钮就能玩 —— 左下摇杆移动，右下攻击键，冲刺键闪避，左上角是商店。横屏画面更大。
+  </p>
   <div class="links">
     <a href="./game/game.c">C 源码</a>
     <a href="./game/修复说明.md">修复说明</a>
@@ -103,6 +130,7 @@
     <a href="./README.md">README</a>
   </div>
   <ul class="feat">
+    <li>手机触屏摇杆</li>
     <li>WASD 移动</li>
     <li>鼠标瞄准</li>
     <li>空格连发</li>
