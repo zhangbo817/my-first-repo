@@ -185,6 +185,20 @@
   html,body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
   body.touch{-webkit-user-select:none;user-select:none;touch-action:none}
   body.touch #wrap{position:fixed;inset:0;height:100%}
+  /* 兜底：浏览器不给锁横屏时，整个舞台顺时针转 90°，视觉上永远是横屏 */
+  body.touch.rot90 #wrap,
+  body.touch.rot90 #overlay,
+  body.touch.rot90 .modal{
+    position:fixed;left:0;top:0;right:auto;bottom:auto;
+    width:100vh;height:100vw;
+    transform-origin:0 0;
+    transform:rotate(90deg) translateY(-100%);
+  }
+  /* 旋转后 vw/vh 仍按真实视口算，弹窗尺寸改用百分比 */
+  body.touch.rot90 .mpanel{width:100%;max-width:100%;height:100%;max-height:100%}
+  body.touch.rot90 .hexpanel{width:100%;max-height:100%}
+  body.touch.rot90 .card{max-width:92%}
+  body.touch.rot90 .hcard{width:min(262px,44%)}
   body.touch #stage canvas{cursor:default;touch-action:none}
   body.touch #hint{display:none}   /* 开局菜单已经讲过操作了，避免挡住顶部关卡文字 */
 
@@ -234,7 +248,7 @@
     font-size:15px;letter-spacing:1px}
 
   /* 竖屏遮罩：强制横屏 */
-  #rotateGate{position:fixed;inset:0;z-index:80;display:none;
+  #rotateGate{position:fixed;inset:0;z-index:80;display:none;cursor:pointer;
     flex-direction:column;align-items:center;justify-content:center;text-align:center;
     padding:24px;
     background:radial-gradient(circle at 50% 42%,rgba(10,22,40,.97),rgba(2,4,9,.99));
@@ -250,15 +264,21 @@
   .rg-t{font-size:20px;letter-spacing:5px;color:#eafcff;
     text-shadow:0 0 26px rgba(95,240,255,.5)}
   .rg-s{margin-top:10px;font-size:12px;line-height:1.8;color:#7fa8cc}
-  .rg-btn{margin-top:22px;padding:11px 26px;border-radius:10px;font-family:inherit;
-    font-size:13px;letter-spacing:1px;cursor:pointer;color:#04121a;font-weight:700;
+  .rg-btn{margin-top:22px;padding:11px 30px;border-radius:10px;display:inline-block;
+    font-size:13px;letter-spacing:1px;color:#04121a;font-weight:700;
     border:1px solid #8ff6ff;
     background:linear-gradient(180deg,#8ff6ff,#3fd7ee);
     box-shadow:0 12px 30px rgba(95,240,255,.3)}
-  .rg-btn:active{transform:scale(.96)}
-  .rg-esc{margin-top:26px;font-size:11.5px;color:#4f6a94;letter-spacing:.5px;
-    padding:6px 12px;visibility:hidden;cursor:pointer}
-  #rotateGate.late .rg-esc{visibility:visible}
+  /* 已切换横屏的小提示（不随画面旋转） */
+  #rotTip{position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:90;
+    display:none;padding:8px 18px;border-radius:999px;font-size:12px;letter-spacing:.5px;
+    color:#bfe9ff;background:rgba(9,18,31,.9);border:1px solid #2b5478;
+    white-space:nowrap;pointer-events:none;
+    box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 22px rgba(95,240,255,.18)}
+  #rotTip.show{display:block;animation:rotTipIn 3.6s ease forwards}
+  @keyframes rotTipIn{0%{opacity:0;transform:translateX(-50%) translateY(-8px)}
+    12%,70%{opacity:1;transform:translateX(-50%) translateY(0)}
+    100%{opacity:0;transform:translateX(-50%) translateY(-8px)}}
 
   /* --- 弹窗在手机上铺满、加大点击热区 --- */
   body.touch .modal{touch-action:pan-y}
@@ -316,14 +336,14 @@
   </div>
 </div>
 
-<!-- 竖屏遮罩：强制横屏 -->
+<!-- 竖屏遮罩：点一下自动切横屏 -->
 <div id="rotateGate">
   <div class="rg-phone"><span></span></div>
-  <div class="rg-t">请横屏游玩</div>
-  <div class="rg-s" id="rgSub">把手机横过来 —— 视野更大<br>摇杆和技能键也更好按</div>
-  <button class="rg-btn" id="rgLock">帮我转成横屏</button>
-  <div class="rg-esc" id="rgEsc">还是竖屏玩 &rsaquo;</div>
+  <div class="rg-t">点一下进入横屏</div>
+  <div class="rg-s">游戏全程横屏 · 视野更大，摇杆和技能键都更好按</div>
+  <div class="rg-btn">进入横屏</div>
 </div>
+<div id="rotTip">已切换为横屏 · 把手机横过来就行</div>
 
 <!-- 商店 / 强化 / 机库 / 图纸 -->
 <div id="shopModal" class="modal">
@@ -2026,6 +2046,8 @@ const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 let VW = 800, VH = 600, DPR = 1, scale = 1, ox = 0, oy = 0;
 let HUD_X = 16;                 /* 触屏下 HUD 左边界，避开左上角商店按钮 */
+let VP_W = 800, VP_H = 600;     /* 视口尺寸（未旋转） */
+let ROT90 = false, ROT_H = 0;   /* 是否整屏旋转 90° / 旋转后舞台高度 */
 const glowCache = new Map();
 
 function makeGlow(col) {
@@ -2062,10 +2084,22 @@ const nebulas = [
 ];
 
 function resize() {
-  const r = cv.parentElement.getBoundingClientRect();
+  const el = cv.parentElement;
+  VP_W = document.documentElement.clientWidth || window.innerWidth || 800;
+  VP_H = document.documentElement.clientHeight || window.innerHeight || 600;
+
+  /* 手机竖屏 + 浏览器不给锁横屏 → 整屏转 90° 兜底 */
+  const wantRot = document.body.classList.contains('touch') && rotMode && VP_H > VP_W;
+  if (wantRot !== ROT90) {
+    ROT90 = wantRot;
+    document.body.classList.toggle('rot90', ROT90);
+  }
+
   DPR = Math.min(2, window.devicePixelRatio || 1);
-  VW = Math.max(320, Math.round(r.width));
-  VH = Math.max(240, Math.round(r.height));
+  /* 用 clientWidth/Height 而不是 getBoundingClientRect，避免被 transform 影响 */
+  VW = Math.max(320, Math.round(el.clientWidth || 0));
+  VH = Math.max(240, Math.round(el.clientHeight || 0));
+  ROT_H = el.clientHeight || 0;
   cv.width = Math.round(VW * DPR);
   cv.height = Math.round(VH * DPR);
   cv.style.width = VW + 'px';
@@ -2078,10 +2112,7 @@ function resize() {
   HUD_X = 16;
   if (document.body.classList.contains('touch')) {
     const tr = document.getElementById('topright');
-    if (tr) {
-      const br = tr.getBoundingClientRect();
-      HUD_X = Math.max(16, Math.round(br.right + 8));
-    }
+    if (tr) HUD_X = Math.max(16, Math.round(tr.offsetLeft + tr.offsetWidth + 8));
   }
 
   /* 手机竖屏：弹横屏遮罩 */
@@ -3309,6 +3340,13 @@ let touchFire = false;                          /* 右侧攻击键按住时为 t
 
 function joyRadius() { return Math.round(Math.min(74, Math.min(VW, VH) * .17)); }
 
+/* 视口坐标 → 画布坐标（整屏旋转 90° 时要反算） */
+function toCanvas(cx, cy) {
+  if (ROT90) return { x: cy, y: ROT_H - cx };
+  const r = cv.getBoundingClientRect();
+  return { x: cx - r.left, y: cy - r.top };
+}
+
 function updateJoy(cx, cy) {
   const R = joy.R;
   const dx = cx - joy.bx, dy = cy - joy.by;
@@ -3345,29 +3383,47 @@ function bindHold(el, on, off) {
 }
 
 /* ---- 竖屏遮罩：手机端强制横屏 ---- */
-let gateTimer = null;
-let gateSkipped = false;          /* 玩家主动选择「还是竖屏玩」 */
+let rotMode = false;              /* 竖屏时是否整屏旋转 90°（浏览器锁不了方向的兜底） */
+let rotTipShown = false;
+
+/* 进全屏 + 锁定横屏（必须在用户手势里调用），成功返回 true */
+async function enterLandscape() {
+  if (!(screen.orientation && screen.orientation.lock)) return false;
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch (_) { /* 全屏没进去也继续试锁方向 */ }
+  try {
+    await screen.orientation.lock('landscape');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 function syncOrientationGate() {
   const gate = document.getElementById('rotateGate');
   if (!gate) return;
-  const show = TOUCH && !gateSkipped && VH > VW;    /* 竖屏 */
+  /* rotMode 下画面已经转成横屏了，就不用再弹遮罩 */
+  const show = TOUCH && !rotMode && VP_H > VP_W;
   if (show) {
     /* 转到竖屏就把游戏停下来，别让玩家在遮罩后面被打死 */
     if (G.started && !G.paused && !G.over && !G.victory && !G.shopOpen && !G.hexOpen) {
       togglePause();
     }
-    if (!gateTimer) {
-      gateTimer = setTimeout(() => {
-        gate.classList.add('late');      /* 6 秒后放出「还是竖屏玩」兜底 */
-        gateTimer = null;
-      }, 6500);
-    }
-  } else {
-    if (gateTimer) { clearTimeout(gateTimer); gateTimer = null; }
-    gate.classList.remove('late');
   }
   gate.classList.toggle('show', show);
+
+  /* 第一次自动转横屏时，给个不旋转的小提示 */
+  if (TOUCH && rotMode && VP_H > VP_W && !rotTipShown) {
+    rotTipShown = true;
+    const tip = document.getElementById('rotTip');
+    if (tip) {
+      tip.classList.add('show');
+      setTimeout(() => tip.classList.remove('show'), 3800);
+    }
+  }
 }
 
 function initTouchUI() {
@@ -3392,9 +3448,9 @@ function initTouchUI() {
     if (G.paused && G.started && !G.over && !G.victory) resume();
     joy.active = true; joy.id = e.pointerId;
     joy.R = joyRadius();
-    const r = cv.getBoundingClientRect();
-    joy.bx = e.clientX - r.left;
-    joy.by = e.clientY - r.top;
+    const p = toCanvas(e.clientX, e.clientY);
+    joy.bx = p.x;
+    joy.by = p.y;
     joy.kx = joy.bx; joy.ky = joy.by;
     touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
     try { zone.setPointerCapture(e.pointerId); } catch (_) {}
@@ -3402,8 +3458,8 @@ function initTouchUI() {
   zone.addEventListener('pointermove', e => {
     if (!joy.active || e.pointerId !== joy.id) return;
     e.preventDefault();
-    const r = cv.getBoundingClientRect();
-    updateJoy(e.clientX - r.left, e.clientY - r.top);
+    const p = toCanvas(e.clientX, e.clientY);
+    updateJoy(p.x, p.y);
   });
   zone.addEventListener('pointerup', e => { if (e.pointerId === joy.id) joyRelease(); });
   zone.addEventListener('pointercancel', e => { if (e.pointerId === joy.id) joyRelease(); });
@@ -3432,37 +3488,22 @@ function initTouchUI() {
     if (G.paused && G.started && !G.over && !G.victory) resume();
   });
 
-  /* --- 横屏遮罩上的两个按钮 --- */
+  /* --- 横屏遮罩：点一下自动进全屏并锁横屏 --- */
   const gate = document.getElementById('rotateGate');
-  const rgLock = document.getElementById('rgLock');
-  const rgEsc = document.getElementById('rgEsc');
-  const rgSub = document.getElementById('rgSub');
+  const canLock = !!(screen.orientation && screen.orientation.lock);
 
-  if (rgEsc) rgEsc.addEventListener('click', () => {
-    gateSkipped = true;
-    syncOrientationGate();
-  });
+  /* 浏览器根本不给锁方向：直接把画面转 90°，不弹遮罩 */
+  if (!canLock) rotMode = true;
 
-  if (rgLock) rgLock.addEventListener('click', async () => {
-    const canLock = !!(screen.orientation && screen.orientation.lock);
-    let ok = false;
-    if (canLock) {
-      try {
-        /* 多数浏览器要求先进全屏才能锁方向 */
-        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-        }
-        await screen.orientation.lock('landscape');
-        ok = true;
-      } catch (_) { ok = false; }
+  if (gate) gate.addEventListener('pointerdown', async e => {
+    if (!canLock) return;
+    e.preventDefault();
+    const ok = await enterLandscape();
+    if (!ok) {
+      /* 锁不住方向 → 兜底把舞台转 90°，视觉上还是横屏 */
+      rotMode = true;
+      resize();
     }
-    setTimeout(() => {
-      if (VH > VW && rgSub) {
-        rgSub.textContent = ok
-          ? '还是竖屏？系统可能锁了方向，请手动把手机横过来'
-          : '这台设备不支持自动旋转，请手动把手机横过来（顺便看看系统有没有开竖屏锁定）';
-      }
-    }, 500);
   });
 
   /* 切到后台自动松手，避免回来还在往前冲 */
@@ -4165,6 +4206,7 @@ function hideOverlay() { overlay.classList.remove('show'); overlayMode = null; }
 function startFromMenu() {
   if (overlayMode !== 'start') return;      /* 防止 Enter 与按钮点击重复触发 */
   audioInit();
+  if (TOUCH) enterLandscape();              /* 开打就进全屏并锁横屏，全程保持横屏 */
   hideOverlay();
   startGame(true);
   G.paused = false;
