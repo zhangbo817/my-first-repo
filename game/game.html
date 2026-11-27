@@ -249,6 +249,17 @@ const BOSS_DEFS = [
 ];
 /* 第 5/10/15/20/25/30 关分别对应前 6 种，最终 BOSS 是第 7 种 */
 
+/* ---------------- 阶段专属精英小怪：和该阶段 BOSS 同一套机制 ---------------- */
+const STAGE_ELITES = [
+  { key: 'crystal', name: '晶簇幼体',   tag: '弹幕', col: '#5ff0ff', r: 16, hpMul: .62, spdMul: 1.00, dmgMul: .50, goldMul: 3, xpMul: 2.2, cd0: 1.8 },
+  { key: 'laser',   name: '棱光浮游',   tag: '激光', col: '#c48bff', r: 15, hpMul: .56, spdMul: 1.10, dmgMul: .48, goldMul: 3, xpMul: 2.2, cd0: 2.8 },
+  { key: 'meteor',  name: '熔渣爬行者', tag: '陨石', col: '#ff7a45', r: 18, hpMul: .78, spdMul: .85,  dmgMul: .55, goldMul: 4, xpMul: 2.6, cd0: 2.6 },
+  { key: 'blade',   name: '裂空掠袭者', tag: '突进', col: '#ff5f6d', r: 14, hpMul: .52, spdMul: 1.40, dmgMul: .55, goldMul: 3, xpMul: 2.2, cd0: 2.4 },
+  { key: 'hive',    name: '虫巢孵育体', tag: '召唤', col: '#5cf08a', r: 17, hpMul: .70, spdMul: .90,  dmgMul: .48, goldMul: 4, xpMul: 2.6, cd0: 5.5 },
+  { key: 'void',    name: '虚空残影',   tag: '瞬移', col: '#8a5cff', r: 15, hpMul: .60, spdMul: 1.05, dmgMul: .50, goldMul: 3, xpMul: 2.4, cd0: 3.4 },
+];
+const stageOf = w => clamp(Math.floor((w - 1) / BOSS_EVERY), 0, 5);
+
 /* ---------------- 机库部件 ---------------- */
 const PARTS = [
   [ { code: 'F1', name: '菱形飞翼',   style: 0, dmg: .10, hp: .06, spd: .02, rate: 0 },
@@ -466,7 +477,7 @@ function spawnEnemy(forceType, counts) {
     hp: b.hp * scale, maxHp: b.hp * scale, speed: b.speed * (1 + (w - 1) * .042), r: b.r,
     dmg: b.dmg * (1 + (w - 1) * .10), gold: Math.max(1, Math.round(b.gold * goldScale)),
     xp: b.xp * Math.sqrt(scale), phase: rnd(0, TAU), spawnAnim: 1, hitFlash: 0,
-    isBoss: false, isFinal: false, stage: 0, fireCd: 0, summonCd: 0, orbit: 0, bossName: '', dead: false,
+    isBoss: false, isFinal: false, stage: 0, sei: -1, fireCd: 0, summonCd: 0, orbit: 0, bossName: '', dead: false,
   });
 }
 function spawnBoss(isFinal) {
@@ -502,9 +513,40 @@ function startWave() {
     banner('第 ' + G.wave + '/' + MAX_WAVE + ' 关 · BOSS 关', '#b06cff');
   } else {
     G.waveLeft = 4 + Math.floor(G.wave / 2);
-    if (G.wave % 3 === 0) { spawnEnemy(4, true); G.waveLeft++; }
-    banner('第 ' + G.wave + '/' + MAX_WAVE + ' 关', '#5ff0ff');
+    const st = stageOf(G.wave);
+    spawnStageElite(G.wave);
+    G.waveLeft++;
+    banner('第 ' + G.wave + '/' + MAX_WAVE + ' 关 · 精英 ' + STAGE_ELITES[st].name,
+           STAGE_ELITES[st].col);
   }
+}
+/* 阶段专属精英：体型/属性都是该阶段 BOSS 的"缩小版" */
+function spawnStageElite(wave) {
+  if (enemies.length >= MAX_ENEMIES) return;
+  const st = stageOf(wave), def = STAGE_ELITES[st];
+  const b = ETYPE[4];
+  const scale = 1 + (wave - 1) * .17;
+  const edge = Math.floor(Math.random() * 4), m = 44;
+  let x = 0, y = 0;
+  if (edge === 0) { x = rnd(60, WORLD_W - 60); y = -m; }
+  else if (edge === 1) { x = WORLD_W + m; y = rnd(60, WORLD_H - 60); }
+  else if (edge === 2) { x = rnd(60, WORLD_W - 60); y = WORLD_H + m; }
+  else { x = -m; y = rnd(60, WORLD_H - 60); }
+  const hp = b.hp * scale * def.hpMul;
+  enemies.push({
+    uid: uidSeq++, x, y, type: 4, level: wave, counts: 1,
+    hp, maxHp: hp,
+    speed: b.speed * (1 + (wave - 1) * .042) * def.spdMul,
+    r: def.r,
+    dmg: b.dmg * (1 + (wave - 1) * .10) * def.dmgMul,
+    gold: Math.max(1, Math.round(b.gold * (1 + (wave - 1) * .10) * def.goldMul)),
+    xp: b.xp * Math.sqrt(scale) * def.xpMul,
+    phase: rnd(0, TAU), spawnAnim: 1, hitFlash: 0,
+    isBoss: false, isFinal: false, stage: 0,
+    sei: st, cd: def.cd0, cd2: 0, castT: 0, spin: rnd(0, TAU),
+    chargeT: 0, dashT: 0, dashVx: 0, dashVy: 0,
+    orbit: 0, bossName: '', dead: false,
+  });
 }
 
 /* ---------------- 流程 ---------------- */
@@ -617,6 +659,14 @@ function killEnemy(i) {
         e.isBoss ? 46 : 10, e.isBoss ? 380 : 250, e.isBoss ? 1 : .55);
   if (e.counts) G.waveLeft = Math.max(0, G.waveLeft - 1);
 
+  if (e.sei >= 0) {                       /* 阶段精英被击杀：更明显的反馈 */
+    const sd = STAGE_ELITES[e.sei];
+    addFloater(ex, ey - 28, sd.name + ' 已清除', sd.col);
+    burst(ex, ey, sd.col, 22, 300, .75);
+    shake = Math.max(shake, 5);
+    sfx(520, .2, 'sine', .4, 1.6);
+  }
+
   const s = stats();
   if (s.leech > 0) heal(s.leech);
 
@@ -645,7 +695,7 @@ function killEnemy(i) {
         hp: ETYPE[0].hp * .5 * sc, maxHp: ETYPE[0].hp * .5 * sc, speed: 100, r: 8,
         dmg: e.dmg * .5, gold: Math.max(1, Math.round(e.gold * .4)), xp: e.xp * .35,
         phase: rnd(0, TAU), spawnAnim: .6, hitFlash: 0, isBoss: false, isFinal: false,
-        stage: 0, fireCd: 0, summonCd: 0, orbit: 0, bossName: '', dead: false,
+        stage: 0, sei: -1, fireCd: 0, summonCd: 0, orbit: 0, bossName: '', dead: false,
       });
       G.waveLeft++;
     }
@@ -761,11 +811,12 @@ function updateBeams(dt) {
 }
 
 /* ---- 陨石 ---- */
-function spawnMeteor(dmg, delay) {
+function spawnMeteor(dmg, delay, radius) {
   if (meteors.length >= 40) return;
   const tx = clamp(P.x + rnd(-85, 85), 40, WORLD_W - 40);
   const ty = clamp(P.y + rnd(-65, 65), 60, WORLD_H - 40);
-  meteors.push({ x: tx, y: -60, tx, ty, t: -(delay || 0), dur: 1.0, dmg, r: 44, dead: false });
+  meteors.push({ x: tx, y: -60, tx, ty, t: -(delay || 0), dur: 1.0, dmg,
+                 r: radius || 44, dead: false });
 }
 function updateMeteors(dt) {
   for (const m of meteors) {
@@ -1007,6 +1058,85 @@ function aiFinal(e, dt) {
   }
 }
 
+/* ===== 阶段精英小怪：机制与同阶段 BOSS 同源，但更小更弱 ===== */
+function updateStageElite(e, dt) {
+  const def = STAGE_ELITES[e.sei];
+  e.cd -= dt;
+  switch (def.key) {
+    case 'crystal': {                      /* 三向晶片弹 */
+      if (e.cd <= 0) {
+        e.cd = 2.0;
+        const base = Math.atan2(P.y - e.y, P.x - e.x);
+        for (let i = -1; i <= 1; i++) {
+          const a = base + i * .30;
+          addEBullet(e.x, e.y, Math.cos(a) * 130, Math.sin(a) * 130, e.dmg * .55,
+            { col: '#9ff7ff', r: 5 });
+        }
+      }
+      break;
+    }
+    case 'laser': {                        /* 短激光 */
+      if (e.cd <= 0) {
+        e.cd = 3.4;
+        spawnBeam(e, Math.atan2(P.y - e.y, P.x - e.x),
+          { charge: .5, dur: .32, w: 8, dmg: 9, col: '#c48bff' });
+      }
+      break;
+    }
+    case 'meteor': {                       /* 小陨石 */
+      if (e.cd <= 0) {
+        e.cd = 3.0;
+        spawnMeteor(8, 0, 28);
+      }
+      break;
+    }
+    case 'blade': {                        /* 短冲刺 */
+      if (e.dashT > 0) {
+        e.dashT -= dt;
+        e.x = clamp(e.x + e.dashVx * dt, e.r, WORLD_W - e.r);
+        e.y = clamp(e.y + e.dashVy * dt, e.r, WORLD_H - e.r);
+        if (dist2(e.x, e.y, P.x, P.y) < (e.r + P.r) * (e.r + P.r) && P.invuln <= 0) {
+          damagePlayer(e.dmg);
+        }
+        if (e.dashT <= 0) e.cd = 2.4;
+        return;
+      }
+      if (e.cd <= 0) {
+        const a = Math.atan2(P.y - e.y, P.x - e.x);
+        e.dashVx = Math.cos(a) * 430;
+        e.dashVy = Math.sin(a) * 430;
+        e.dashT = .22;
+        burst(e.x, e.y, '#ff5f6d', 6, 140, .35);
+      }
+      break;
+    }
+    case 'hive': {                         /* 定期孵化小怪 */
+      if (e.cd <= 0) {
+        e.cd = 6.0;
+        spawnEnemy(0, 0);
+        burst(e.x, e.y, '#5cf08a', 8, 140, .4);
+        sfx(300, .08, 'square', .12, 1.2);
+      }
+      break;
+    }
+    case 'void': {                         /* 短距瞬移 + 十字弹 */
+      if (e.cd <= 0) {
+        e.cd = 3.6;
+        burst(e.x, e.y, '#8a5cff', 10, 180, .4);
+        e.x = clamp(P.x + rnd(-170, 170), 40, WORLD_W - 40);
+        e.y = clamp(P.y + rnd(-170, 170), 40, WORLD_H - 40);
+        burst(e.x, e.y, '#8a5cff', 10, 180, .4);
+        for (let i = 0; i < 4; i++) {
+          const a = TAU * i / 4 + rnd(0, .3);
+          addEBullet(e.x, e.y, Math.cos(a) * 120, Math.sin(a) * 120, e.dmg * .45,
+            { col: '#c4a6ff' });
+        }
+      }
+      break;
+    }
+  }
+}
+
 function updateBoss(e, dt) {
   const ratio = e.hp / e.maxHp;
   const ns = ratio > .66 ? 0 : ratio > .33 ? 1 : 2;
@@ -1169,12 +1299,21 @@ function update(dt) {
       }
     }
 
+    if (e.sei >= 0) updateStageElite(e, dt);
+
     const rr3 = e.r + pr;
     if (dist2(e.x, e.y, P.x, P.y) < rr3 * rr3 && P.invuln <= 0) {
       damagePlayer(e.dmg);
-      burst(e.x, e.y, ETYPE[e.type].col, 8, 180, .4);
-      if (e.counts) G.waveLeft = Math.max(0, G.waveLeft - 1);
-      e.dead = true;
+      burst(e.x, e.y, e.sei >= 0 ? STAGE_ELITES[e.sei].col : ETYPE[e.type].col, 8, 180, .4);
+      if (e.sei >= 0) {
+        /* 阶段精英不会像小怪那样同归于尽，撞到玩家只被弹开 */
+        const dd = Math.max(.001, Math.hypot(e.x - P.x, e.y - P.y));
+        e.x = clamp(P.x + (e.x - P.x) / dd * (rr3 + 6), e.r, WORLD_W - e.r);
+        e.y = clamp(P.y + (e.y - P.y) / dd * (rr3 + 6), e.r, WORLD_H - e.r);
+      } else {
+        if (e.counts) G.waveLeft = Math.max(0, G.waveLeft - 1);
+        e.dead = true;
+      }
     }
   }
   sweep(enemies);
@@ -1768,6 +1907,27 @@ function drawBossBody(e) {
   }
 }
 
+/* 阶段精英：直接复用同阶段 BOSS 的外形函数，按小尺寸重绘 + 一圈精英光环 */
+function drawStageElite(e) {
+  const def = STAGE_ELITES[e.sei];
+  const col = e.hitFlash > .78 ? '#ffffff' : def.col;
+  const r = e.r;
+  const rot = G.t * .8;
+  switch (def.key) {
+    case 'crystal': drawCrystalCore(e, col, r, rot); break;
+    case 'laser':   drawPrismEye(e, col, r, rot); break;
+    case 'meteor':  drawMagmaTitan(e, col, r, rot); break;
+    case 'blade':   drawRiftBlade(e, col, r, rot); break;
+    case 'hive':    drawHive(e, col, r, rot); break;
+    case 'void':    drawVoidLord(e, col, r, rot); break;
+  }
+  ctx.globalAlpha = .30 + .18 * Math.abs(Math.sin(G.t * 4));
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1.5;
+  circlePath(0, 0, r * 1.9); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 function drawEnemy(e) {
   const b = ETYPE[e.type];
   const col = e.hitFlash > .3 ? '#ffffff' : b.col;
@@ -1779,7 +1939,9 @@ function drawEnemy(e) {
     ctx.restore();
     return;
   }
-  switch (b.shape) {
+  if (e.sei >= 0) {
+    drawStageElite(e);
+  } else switch (b.shape) {
     case 'circle':
       drawGlow(0, 0, r * 1.9, col, .22);
       ctx.fillStyle = col;
@@ -2607,6 +2769,10 @@ function boot() {
     runBossTest();
     return;
   }
+  if (params.has('elitetest')) {
+    runEliteTest();
+    return;
+  }
   if (params.has('gallery')) {
     hintEl.style.display = 'none';
     runGallery();
@@ -2620,7 +2786,11 @@ function boot() {
     G.paused = false;
     hintEl.style.display = 'none';
     const w = +params.get('wave');
-    if (w > 0) { G.wave = clamp(w, 1, MAX_WAVE); startWave(); }
+    if (w > 0) {
+      G.wave = clamp(w, 1, MAX_WAVE);
+      enemies = []; ebullets = []; beams = []; meteors = [];
+      startWave();
+    }
     if (params.has('final')) { G.finalPhase = true; spawnBoss(true); }
     if (params.has('bosshp')) {          /* 调试：直接把 BOSS 血量设成百分比 */
       const f = clamp(+params.get('bosshp'), .01, 1);
@@ -2921,23 +3091,38 @@ function runBossTest() {
   document.title = fail ? '[BOSSTEST FAIL] ' + fail : '[BOSSTEST PASS]';
 }
 
-/* ---------------- BOSS 图鉴（?gallery=1 静态展示七种外形） ---------------- */
+/* ---------------- BOSS 图鉴（?gallery=1 静态展示七种 BOSS + 六种阶段精英） ---------------- */
 function runGallery() {
   G.gallery = true;
   G.started = true;
   G.paused = true;
   const RS = [34, 32, 42, 26, 38, 30, 52];
   enemies = [];
+  /* 两排 BOSS：第一排 4 个，第二排 3 个居中 */
   for (let k = 0; k < 7; k++) {
-    const col = k % 4, row = Math.floor(k / 4);
+    const first = k < 4;
+    const col = first ? k : k - 4;
+    const n = first ? 4 : 3;
     enemies.push({
-      uid: uidSeq++, x: WORLD_W * (col + .5) / 4, y: row === 0 ? WORLD_H * .32 : WORLD_H * .70,
-      type: 4, level: 1, counts: 0, hp: 1000, maxHp: 1000, speed: 0, r: RS[k] * 1.35,
+      uid: uidSeq++, x: WORLD_W * (col + .5) / n, y: first ? 108 : 258,
+      type: 4, level: 1, counts: 0, hp: 1000, maxHp: 1000, speed: 0, r: RS[k] * .85,
       dmg: 0, gold: 0, xp: 0, phase: 0, spawnAnim: 0, hitFlash: 0,
-      isBoss: true, isFinal: k === 6, bkind: k, stage: 0,
+      isBoss: true, isFinal: k === 6, bkind: k, stage: 0, sei: -1,
       cd: 1e9, cd2: 1e9, cd3: 1e9, cd4: 1e9, cd5: 1e9, cd6: 1e9,
       castT: 0, spin: 0, chargeT: 0, dashT: 0, dashVx: 0, dashVy: 0,
       orbit: 0, bossName: BOSS_DEFS[k].name, dead: false,
+    });
+  }
+  /* 一排阶段精英 */
+  for (let k = 0; k < 6; k++) {
+    enemies.push({
+      uid: uidSeq++, x: WORLD_W * (k + .5) / 6, y: 455,
+      type: 4, level: 1, counts: 0, hp: 1000, maxHp: 1000, speed: 0,
+      r: STAGE_ELITES[k].r * 1.3,
+      dmg: 0, gold: 0, xp: 0, phase: 0, spawnAnim: 0, hitFlash: 0,
+      isBoss: false, isFinal: false, bkind: 0, stage: 0, sei: k,
+      cd: 1e9, cd2: 1e9, castT: 0, spin: 0, chargeT: 0, dashT: 0,
+      dashVx: 0, dashVy: 0, orbit: 0, bossName: '', dead: false,
     });
   }
   startLoop();
@@ -2957,20 +3142,113 @@ function renderGallery() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const grid = { x: ox, y: oy, w: WORLD_W * scale, h: WORLD_H * scale };
-  for (let k = 0; k < 7; k++) {
-    const col = k % 4, row = Math.floor(k / 4);
-    const cx = grid.x + grid.w * (col + .5) / 4;
-    const cy = grid.y + grid.h * (row === 0 ? .32 : .70) + (enemies[k].r + 46) * scale;
-    const def = BOSS_DEFS[k];
-    ctx.font = '700 15px "Segoe UI","Microsoft YaHei",system-ui,sans-serif';
-    ctx.fillStyle = def.col;
-    ctx.fillText(def.name, cx, cy);
+  const gx = ox, gy = oy, gw = WORLD_W * scale;
+  const W2S = v => v * scale;                       /* 世界坐标偏移 → 屏幕像素 */
+  const sx = wx => gx + wx * scale;
+  const sy = wy => gy + wy * scale;
+  const put = (cx, cy, main, sub, col, fs) => {
+    ctx.font = '700 ' + fs + 'px "Segoe UI","Microsoft YaHei",system-ui,sans-serif';
+    ctx.fillStyle = col;
+    ctx.fillText(main, cx, cy);
     ctx.font = '600 11.5px "Segoe UI",system-ui,sans-serif';
     ctx.fillStyle = '#7f9cc0';
-    ctx.fillText('[' + def.tag + ']  ' + def.desc, cx, cy + 18);
+    ctx.fillText(sub, cx, cy + 17);
+  };
+  ctx.font = '700 13px "Segoe UI",system-ui,sans-serif';
+  ctx.fillStyle = '#4f6a94';
+  ctx.fillText('BOSS（第 5 / 10 / 15 / 20 / 25 / 30 关）', gx + gw * .5, gy + W2S(24));
+
+  for (let k = 0; k < 7; k++) {
+    const e = enemies[k], def = BOSS_DEFS[k];
+    put(sx(e.x), sy(e.y) + W2S(e.r) + 22,
+        def.name, '[' + def.tag + '] ' + def.desc, def.col, 15);
+  }
+
+  ctx.font = '700 13px "Segoe UI",system-ui,sans-serif';
+  ctx.fillStyle = '#4f6a94';
+  ctx.fillText('阶段专属精英小怪（每阶段 4 个普通关里各出 1 只）', gx + gw * .5, gy + W2S(372));
+
+  for (let k = 0; k < 6; k++) {
+    const e = enemies[7 + k], def = STAGE_ELITES[k];
+    put(sx(e.x), sy(e.y) + W2S(e.r) + 20,
+        def.name, '[' + def.tag + '] ' + (k * 5 + 1) + '–' + (k * 5 + 4) + ' 关',
+        def.col, 13.5);
   }
   ctx.textBaseline = 'alphabetic';
+}
+
+/* ---------------- 阶段精英自测：验证六种精英的专属机制 ---------------- */
+function runEliteTest() {
+  const res = [];
+  let fail = 0;
+  const ok = (n, c, extra) => {
+    if (!c) fail++;
+    res.push((c ? 'PASS  ' : 'FAIL  ') + n + (extra ? '   [' + extra + ']' : ''));
+  };
+  const MECH = ['弹幕', '激光', '陨石', '突进', '召唤', '瞬移'];
+
+  for (let st = 0; st < 6; st++) {
+    startGame(true);
+    G.autotest = true;
+    enemies = [];
+    G.wave = st * 5 + 1;               /* 该阶段的第一关（非 BOSS 关）*/
+    startWave();
+
+    const el = enemies.find(e => e.sei === st && !e.isBoss);
+    ok('#' + st + ' 生成「' + STAGE_ELITES[st].name + '」', !!el,
+       '关卡 ' + G.wave + ' · 场上敌人 ' + enemies.length);
+    if (!el) continue;
+    ok('#' + st + ' 计入本关进度', el.counts === 1);
+
+    el.maxHp = 1e9; el.hp = 1e9;       /* 先别死，专心测机制 */
+    G.waveLeft = 0;                    /* 关掉普通刷怪，场上新出现的敌人一定是它招的 */
+    G.spawnTimer = 1e9;
+    let sawBullet = false, sawBeam = false, sawMeteor = false;
+    let sawDash = false, sawSpawn = false, maxJump = 0;
+    const baseN = enemies.length;
+    let px = el.x, py = el.y;
+
+    for (let f = 0; f < 420; f++) {    /* 7 秒 */
+      P.hp = P.maxHp;
+      P.aimAngle = Math.atan2(el.y - P.y, el.x - P.x);
+      update(1 / 60);
+      if (ebullets.length) sawBullet = true;
+      if (beams.length) sawBeam = true;
+      if (meteors.length) sawMeteor = true;
+      if (el.dashT > 0) sawDash = true;
+      if (enemies.length > baseN) sawSpawn = true;
+      const j = Math.hypot(el.x - px, el.y - py);
+      if (j > maxJump) maxJump = j;
+      px = el.x; py = el.y;
+    }
+    const flags = [sawBullet, sawBeam, sawMeteor, sawDash, sawSpawn, maxJump > 60];
+    ok('#' + st + ' 机制 ' + MECH[st], flags[st],
+       [sawBullet, sawBeam, sawMeteor, sawDash, sawSpawn, maxJump > 60].map(v => v ? 1 : 0).join(''));
+
+    /* 撞到玩家：精英不会被同归于尽 */
+    el.hp = 1e9;
+    P.x = clamp(el.x, P.r, WORLD_W - P.r);
+    P.y = clamp(el.y, P.r, WORLD_H - P.r);
+    P.invuln = 0;
+    for (let f = 0; f < 3; f++) update(1 / 60);
+    ok('#' + st + ' 撞玩家后不被消耗', !el.dead, '存活=' + (!el.dead));
+
+    /* 可被击杀 */
+    el.hp = 1;
+    P.fireCd = 0;
+    for (let f = 0; f < 240 && !el.dead; f++) {
+      P.hp = P.maxHp;
+      if (!el.dead) P.aimAngle = Math.atan2(el.y - P.y, el.x - P.x);
+      update(1 / 60);
+    }
+    ok('#' + st + ' 可被击杀', el.dead);
+  }
+
+  const out = document.getElementById('testout');
+  out.hidden = false;
+  out.textContent = '=== STAGE ELITE TEST ===\n' + res.join('\n') +
+                    '\n\n' + (fail ? ('FAILED: ' + fail + ' 项') : 'ALL PASS');
+  document.title = fail ? '[ELITETEST FAIL] ' + fail : '[ELITETEST PASS]';
 }
 
 /* 全局错误也写进 DOM，方便无头检查 */
