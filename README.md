@@ -2,6 +2,39 @@
 
 This is my first GitHub repository — a place to practice Git and keep my code.
 
+## 编译与运行（C 语言版）
+
+本仓库的 C 项目在 `game/` 目录，源码是单文件 `game/game.c`（**纯 C，C11 标准**），
+只用标准库，不需要任何第三方依赖，有 C 编译器就能跑。
+
+**Windows（MinGW / Dev-C++ 的 gcc）**
+
+```bat
+cd game
+build.bat
+:: 或者直接手敲
+gcc -std=c11 -O2 -o game.exe game.c
+game.exe
+```
+
+**Linux / macOS**
+
+```bash
+cd game
+gcc -std=c11 -O2 -o game game.c
+./game
+```
+
+无人值守自检（跑 30000 帧后打印统计，用来确认编译产物是可运行的）：
+
+```bash
+game.exe --selftest 30000
+```
+
+操作：`W/A/S/D` 移动 · `J`/`L` 转向瞄准 · `空格` 开关持续开火 · `C` 冲刺闪避 · `Tab` 商店/装备/机库面板 · `X` 退出。
+
+> 也可以用 VS Code / Visual Studio 打开 `game/game.c` 直接 F5 编译运行；`build.bat` 会自动依次尝试 MSVC → gcc → Dev-C++ MinGW。
+
 ## What I'm learning
 
 - `git init` / `git add` / `git commit` — the basic loop
