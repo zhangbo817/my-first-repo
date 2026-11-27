@@ -198,9 +198,10 @@
     </div>
     <div class="tabs" id="tabs">
       <button data-tab="0" class="on">商店</button>
-      <button data-tab="1">强化</button>
-      <button data-tab="2">机库</button>
-      <button data-tab="3">图纸</button>
+      <button data-tab="1">战机</button>
+      <button data-tab="2">强化</button>
+      <button data-tab="3">机库</button>
+      <button data-tab="4">图纸</button>
     </div>
     <div id="tabbody"></div>
     <div class="pfoot" id="pfoot"></div>
@@ -234,6 +235,13 @@ const rnd = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random
 const rint = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
+const segDist2 = (px, py, ax, ay, bx, by) => {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  let t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const cx = ax + dx * t, cy = ay + dy * t;
+  return (px - cx) * (px - cx) + (py - cy) * (py - cy);
+};
 const norm = a => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; };
 const nf = n => (n >= 1000000 ? (n / 1e6).toFixed(1) + 'M' : n >= 10000 ? (n / 1000).toFixed(1) + 'k' : Math.round(n).toString());
 
@@ -438,9 +446,41 @@ function styleOfParts(p) {
   }
   return us > cn ? 0 : cn > us ? 1 : 2;
 }
-function addJet(code, label, style, p) {
+/* ---------------- 战机：武器类型 + 分级商品 ---------------- */
+const WEAPONS = {
+  single:  { key: 'single',  name: '单管机炮', desc: '标准单发',       count: 0, dmgMul: 1.00, rateMul: 1.00, pierce: 0 },
+  spread3: { key: 'spread3', name: '三管阵列', desc: '3 发散射',       count: 3, dmgMul: 0.72, rateMul: 1.00, pierce: 0 },
+  spread5: { key: 'spread5', name: '五管齐射', desc: '5 发宽扇形',     count: 5, dmgMul: 0.56, rateMul: 1.06, pierce: 0 },
+  laser:   { key: 'laser',   name: '聚焦激光', desc: '高速穿透光束',   count: 1, dmgMul: 1.25, rateMul: 0.62, pierce: 99 },
+  heavy:   { key: 'heavy',   name: '重炮',     desc: '单发巨伤·贯穿 2', count: 1, dmgMul: 2.60, rateMul: 1.50, pierce: 2 },
+};
+/* tier：1 初始机 / 2 进阶 / 3 高级 / 4 顶级；price 越贵越强 */
+const JET_CATALOG = [
+  { code: 'VX-71', name: '夜隼', tier: 1, price: 0,   weapon: 'single',  style: 0, col: '#7fd0ff', parts: [0, 0, 0, 0], desc: '均衡的入门机型' },
+  { code: 'LY-31', name: '龙吟', tier: 1, price: 0,   weapon: 'spread3', style: 1, col: '#ff9d6c', parts: [1, 1, 1, 1], desc: '三管散射，清杂兵快' },
+  { code: 'MX-09', name: '混天', tier: 1, price: 0,   weapon: 'single',  style: 2, col: '#b98bff', parts: [2, 2, 2, 2], desc: '射速偏快' },
+  { code: 'TF-02', name: '蜂群', tier: 2, price: 220, weapon: 'spread3', style: 1, col: '#5cf08a', parts: [1, 2, 1, 1], desc: '高射速三管' },
+  { code: 'SC-77', name: '棱镜', tier: 2, price: 280, weapon: 'laser',   style: 0, col: '#5ff0ff', parts: [0, 1, 2, 2], desc: '穿透激光，一条线扫过去' },
+  { code: 'HN-90', name: '猎隼', tier: 3, price: 480, weapon: 'spread5', style: 0, col: '#ffd75f', parts: [0, 0, 3, 3], desc: '五管弹幕覆盖' },
+  { code: 'RG-01', name: '熔火', tier: 3, price: 580, weapon: 'heavy',   style: 2, col: '#ff7a45', parts: [3, 2, 0, 3], desc: '重炮贯穿，一炮一串' },
+  { code: 'AX-00', name: '终焉', tier: 4, price: 960, weapon: 'laser',   style: 2, col: '#ffe9a0', parts: [3, 3, 3, 3], desc: '顶级激光平台，全面压制' },
+];
+const JET_MAX_LVL = 5;
+const jetOwnedIdx = cid => jets.findIndex(j => j.cid === cid);
+const upCost = j => Math.round(90 * Math.max(1, j.tier) * Math.max(1, j.lvl));
+
+function addJet(code, label, style, p, meta) {
   if (jets.length >= MAX_JETS) return -1;
-  jets.push({ code, label, style, p: p.slice(), used: true });
+  const m = meta || {};
+  const col = m.col || STYLE_COL[clamp(style, 0, 2)];
+  jets.push({
+    code, label, style, p: p.slice(), used: true,
+    cid: m.cid != null ? m.cid : -1,
+    lvl: m.lvl || 1,
+    tier: m.tier || 1,
+    weapon: m.weapon || 'single',
+    col,
+  });
   markCombo(jets[jets.length - 1].p);
   return jets.length - 1;
 }
@@ -456,9 +496,42 @@ function jetBonus(idx) {
 }
 function initJets() {
   jets = [];
-  addJet('VX-71', '夜隼', 0, [0, 0, 0, 0]);
-  addJet('LY-31', '龙吟', 1, [1, 1, 1, 1]);
-  addJet('MX-09', '混天', 2, [2, 2, 2, 2]);
+  for (let c = 0; c < 3; c++) {            /* 三架初始机免费自带 */
+    const cat = JET_CATALOG[c];
+    addJet(cat.code, cat.name, cat.style, cat.parts,
+           { cid: c, tier: cat.tier, weapon: cat.weapon, col: cat.col });
+  }
+}
+/* 买机 / 升级 */
+function buyJet(cid) {
+  const cat = JET_CATALOG[cid];
+  if (!cat) return -1;
+  if (jetOwnedIdx(cid) >= 0) return upgradeJet(cid);
+  if (G.gold < cat.price) { banner('金币不足', '#ff5f6d'); sfx(160, .12, 'square', .5); return -1; }
+  if (jets.length >= MAX_JETS) { banner('机库已满', '#ff5f6d'); return -1; }
+  G.gold -= cat.price;
+  const i = addJet(cat.code, cat.name, cat.style, cat.parts,
+                   { cid, tier: cat.tier, weapon: cat.weapon, col: cat.col });
+  G.activeJet = i;
+  banner('购入 ' + cat.name + ' · ' + WEAPONS[cat.weapon].name, cat.col);
+  sfx(520, .07, 'square', .5); setTimeout(() => sfx(780, .09, 'square', .45), 70);
+  burst(P.x, P.y, cat.col, 20, 280, .7);
+  return i;
+}
+function upgradeJet(cid) {
+  const i = jetOwnedIdx(cid);
+  if (i < 0) return -1;
+  const j = jets[i];
+  if (j.lvl >= JET_MAX_LVL) { banner('已满级', '#8fb4d8'); return -1; }
+  const cost = upCost(j);
+  if (G.gold < cost) { banner('金币不足', '#ff5f6d'); sfx(160, .12, 'square', .5); return -1; }
+  G.gold -= cost;
+  j.lvl++;
+  banner(j.name + ' 升级 Lv' + j.lvl, j.col);
+  addFloater(P.x, P.y - 40, 'Lv' + j.lvl, j.col);
+  sfx(660, .08, 'square', .4); setTimeout(() => sfx(880, .1, 'square', .35), 60);
+  burst(P.x, P.y, j.col, 14, 240, .6);
+  return i;
 }
 function buildJet(cost) {
   if (G.gold < cost) { banner('金币不足', '#ff5f6d'); sfx(160, .12, 'square', .5); return -1; }
@@ -466,9 +539,12 @@ function buildJet(cost) {
   G.gold -= cost;
   const style = styleOfParts(G.blueprint);
   const code = 'BX-' + String(jets.length + 1).padStart(2, '0');
-  const i = addJet(code, '自组机 #' + (jets.length + 1), style, G.blueprint);
+  /* 武器槽决定开火方式：G1 单管 / G2 三管 / G3 激光 / G4 五管 */
+  const wpn = ['single', 'spread3', 'laser', 'spread5'][clamp(G.blueprint[3], 0, 3)];
+  const i = addJet(code, '自组机 #' + (jets.length + 1), style, G.blueprint,
+                   { tier: 1, weapon: wpn });
   G.activeJet = i;
-  banner('组装 ' + code + ' [' + STYLE_NAME[style] + ']', '#5ff0ff');
+  banner('组装 ' + code + ' · ' + WEAPONS[wpn].name, '#5ff0ff');
   sfx(520, .07, 'square', .5); setTimeout(() => sfx(780, .09, 'square', .45), 70);
   burst(P.x, P.y, '#5ff0ff', 18, 260, .7);
   return i;
@@ -489,9 +565,11 @@ function fuseJets(a, b) {
   }
   const style = jets[a].style === jets[b].style ? jets[a].style : 2;
   const code = 'FX-' + String(jets.length + 1).padStart(2, '0');
-  const i = addJet(code, '融合机 #' + (jets.length + 1), style, p);
+  const wpn = ['single', 'spread3', 'laser', 'spread5'][clamp(p[3], 0, 3)];
+  const i = addJet(code, '融合机 #' + (jets.length + 1), style, p,
+                   { tier: 2, weapon: wpn });
   G.activeJet = i;
-  banner('融合 ' + code + ' [' + STYLE_NAME[style] + ']', '#b06cff');
+  banner('融合 ' + code + ' · ' + WEAPONS[wpn].name, '#b06cff');
   sfx(300, .18, 'sawtooth', .4, 2.2);
   burst(P.x, P.y, '#b06cff', 24, 320, .8);
   return i;
@@ -526,11 +604,15 @@ function stats() {
     rangeMul: 1 + b[S_RANGE] * .10,
     critDmg: 2.2, killBoom: 0, dashBoom: 0,
   };
+  const jj = jets[G.activeJet];
   const j = jetBonus(G.activeJet);
-  s.damage *= 1 + j.dmg;
-  s.maxHp *= 1 + j.hp;
+  const lvl = jj ? jj.lvl : 1;
+  const tierMul = jj ? 1 + (jj.tier - 1) * .12 : 1;
+  const wp = WEAPONS[jj ? jj.weapon : 'single'] || WEAPONS.single;
+  s.damage *= (1 + j.dmg) * tierMul * (1 + (lvl - 1) * .10) * wp.dmgMul;
+  s.maxHp *= (1 + j.hp) * tierMul * (1 + (lvl - 1) * .08);
   s.speedMul *= 1 + j.spd;
-  s.interval *= 1 - clamp(j.rate, 0, .55);
+  s.interval *= (1 - clamp(j.rate, 0, .55)) * Math.pow(.96, lvl - 1) * wp.rateMul;
   /* 海克斯强化叠加 */
   for (const h of HEX) {
     const n = G.hex[h.id] || 0;
@@ -831,20 +913,36 @@ function fire() {
   const s = stats();
   P.fireCd = s.interval;
   G.shots++;
-  const n = s.bulletCount, spread = n > 1 ? .09 : .028;
+
+  const jj = jets[G.activeJet];
+  const wp = WEAPONS[jj ? jj.weapon : 'single'] || WEAPONS.single;
+  const laser = wp.key === 'laser', heavy = wp.key === 'heavy';
+  const n = (wp.count || 1) + G.bought[S_MULTI];
+  const spread = wp.count >= 5 ? .17 : wp.count > 1 ? .10 : .028;
+  const spd = laser ? 2600 : heavy ? 640 : 780 * Math.sqrt(s.rangeMul);
+  const pierce = laser ? 99 : heavy ? 2 + s.link : s.link;
+  const col = jj ? jj.col : '#5ff0ff';
+
   for (let i = 0; i < n; i++) {
     if (bullets.length >= MAX_BULLETS) break;
     const off = n === 1 ? 0 : (i - (n - 1) / 2) * spread;
     const a = P.aimAngle + off + rnd(-.02, .02);
-    const spd = 780 * Math.sqrt(s.rangeMul);
     bullets.push({
       x: P.x + Math.cos(P.aimAngle) * 16, y: P.y + Math.sin(P.aimAngle) * 16,
-      vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: 3,
-      life: 1.5 * s.rangeMul, dmg: s.damage, crit: Math.random() < s.crit,
-      hitsLeft: s.link, hits: [], dead: false,
+      vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+      r: laser ? 6 : heavy ? 9 : 3,
+      life: laser ? .30 : heavy ? 0.9 * s.rangeMul : 1.5 * s.rangeMul,
+      ox: P.x + Math.cos(P.aimAngle) * 16, oy: P.y + Math.sin(P.aimAngle) * 16,
+      dmg: s.damage, crit: Math.random() < s.crit,
+      hitsLeft: pierce, hits: [], laser, heavy, col, dead: false,
     });
   }
-  burst(P.x + Math.cos(P.aimAngle) * 18, P.y + Math.sin(P.aimAngle) * 18, '#5ff0ff', 2, 110, .16);  sfx(760, .045, 'square', .18, .55);
+  const mx = P.x + Math.cos(P.aimAngle) * 18, my = P.y + Math.sin(P.aimAngle) * 18;
+  burst(mx, my, laser ? '#bffcff' : heavy ? '#ffd7a8' : col, laser ? 4 : 2,
+        laser ? 150 : 110, .16);
+  sfx(laser ? 1200 : heavy ? 220 : 760, laser ? .05 : heavy ? .1 : .045,
+      laser ? 'sawtooth' : 'square', laser ? .12 : heavy ? .3 : .18,
+      laser ? 2 : heavy ? .6 : .55);
 }
 
 /* ---------------- BOSS 弹幕 / 技能 ---------------- */
@@ -1372,6 +1470,7 @@ function update(dt) {
   for (let i = 0; i < bullets.length; i++) {
     const b = bullets[i];
     if (b.dead) continue;
+    const px0 = b.x, py0 = b.y;
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     if (b.life <= 0 || b.x < -20 || b.x > WORLD_W + 20 || b.y < -20 || b.y > WORLD_H + 20) { b.dead = true; continue; }
     for (let j = 0; j < enemies.length; j++) {
@@ -1379,7 +1478,11 @@ function update(dt) {
       if (e.dead) continue;
       if (b.hits.indexOf(e.uid) >= 0) continue;
       const rr = b.r + e.r;
-      if (dist2(b.x, b.y, e.x, e.y) < rr * rr) {
+      /* 激光速度极快，用「上一帧位置→当前位置」的线段判定，避免穿过小怪 */
+      const hit = b.laser
+        ? segDist2(e.x, e.y, px0, py0, b.x, b.y) < rr * rr
+        : dist2(b.x, b.y, e.x, e.y) < rr * rr;
+      if (hit) {
         let dmg = b.crit ? b.dmg * s.critDmg : b.dmg;
         if (e.isBoss) dmg *= s.bossMul;
         e.hp -= dmg; e.hitFlash = 1; G.hits++;
@@ -2679,15 +2782,42 @@ function render() {
   /* 我方子弹 */
   for (const b of bullets) {
     if (b.dead) continue;
-    const col = b.crit ? '#ffd75f' : '#5ff0ff';
-    ctx.strokeStyle = col;
-    ctx.lineWidth = b.crit ? 3.4 : 2.6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(b.x - b.vx * .021, b.y - b.vy * .021);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-    drawGlow(b.x, b.y, b.crit ? 11 : 9, col, .6);
+    const col = b.laser ? '#bffcff' : b.crit ? '#ffd75f' : (b.col || '#5ff0ff');
+    if (b.laser) {
+      const ox = b.ox != null ? b.ox : b.x, oy = b.oy != null ? b.oy : b.y;
+      ctx.lineCap = 'round';
+      const g = ctx.createLinearGradient(ox, oy, b.x, b.y);
+      g.addColorStop(0, 'rgba(120,245,255,.12)');
+      g.addColorStop(.55, 'rgba(190,252,255,.75)');
+      g.addColorStop(1, 'rgba(255,255,255,.98)');
+      ctx.strokeStyle = g;
+      ctx.globalAlpha = .38;
+      ctx.lineWidth = 11;
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 3.4;
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(b.x, b.y); ctx.stroke();
+      drawGlow(b.x, b.y, 22, col, .55);
+    } else if (b.heavy) {
+      drawGlow(b.x, b.y, 28, col, .55);
+      ctx.fillStyle = col;
+      circlePath(b.x, b.y, 9.5); ctx.fill();
+      ctx.fillStyle = '#fff';
+      circlePath(b.x, b.y, 4); ctx.fill();
+    } else {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = b.crit ? 3.4 : 2.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(b.x - b.vx * .021, b.y - b.vy * .021);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      drawGlow(b.x, b.y, b.crit ? 11 : 9, col, .6);
+    }
   }
 
   /* 敌人 */
@@ -2782,13 +2912,13 @@ window.addEventListener('keydown', e => {
   /* 商店打开时：数字键切页，Tab/Esc 关闭 */
   if (G.shopOpen) {
     if (k === 'tab' || k === 'escape') { closeShop(); return; }
-    if (k >= '1' && k <= '4') { setTab(+k - 1); return; }
+    if (k >= '1' && k <= '5') { setTab(+k - 1); return; }
     if (k === 'arrowup') { navSel(-1); return; }
     if (k === 'arrowdown') { navSel(1); return; }
     if (k === 'enter') { confirmSel(); return; }
-    if (k === 'b' && G.tab === 3) { buildJet(JET_BUILD_COST); return; }
-    if (k === 'g' && G.tab === 3) { randomJet(JET_RANDOM_COST); return; }
-    if (k === 'f' && G.tab === 2) { doFuse(); return; }
+    if (k === 'b' && G.tab === 4) { buildJet(JET_BUILD_COST); return; }
+    if (k === 'g' && G.tab === 4) { randomJet(JET_RANDOM_COST); return; }
+    if (k === 'f' && G.tab === 3) { doFuse(); return; }
     if (k === 'm') { AU.muted = !AU.muted; return; }
     return;
   }
@@ -2923,8 +3053,9 @@ hexCards.addEventListener('click', e => {
 
 function tabMax() {
   if (G.tab === 0) return SHOP_N;
-  if (G.tab === 2) return Math.max(1, jets.length);
-  if (G.tab === 3) return PART_SLOTS;
+  if (G.tab === 1) return JET_CATALOG.length;
+  if (G.tab === 3) return Math.max(1, jets.length);
+  if (G.tab === 4) return PART_SLOTS;
   return 1;
 }
 function navSel(d) {
@@ -2933,15 +3064,16 @@ function navSel(d) {
   buildPanel();
 }
 function changePart(d) {
-  if (G.tab !== 3) { setTab((G.tab + (d > 0 ? 1 : 3)) % 4); return; }
+  if (G.tab !== 4) { setTab((G.tab + (d > 0 ? 1 : 4)) % 5); return; }
   const k = clamp(G.sel, 0, PART_SLOTS - 1);
   G.blueprint[k] = (G.blueprint[k] + (d > 0 ? 1 : PART_PER_SLOT - 1)) % PART_PER_SLOT;
   buildPanel();
 }
 function confirmSel() {
   if (G.tab === 0) buyItem(clamp(G.sel, 0, SHOP_N - 1));
-  else if (G.tab === 2) deployJet(clamp(G.sel, 0, jets.length - 1));
-  else if (G.tab === 3) buildJet(JET_BUILD_COST);
+  else if (G.tab === 1) jetAction(clamp(G.sel, 0, JET_CATALOG.length - 1));
+  else if (G.tab === 3) deployJet(clamp(G.sel, 0, jets.length - 1));
+  else if (G.tab === 4) buildJet(JET_BUILD_COST);
 }
 function buyItem(id) {
   if (G.bought[id] >= SHOP[id].maxLv) return;
@@ -2969,6 +3101,7 @@ bodyEl.addEventListener('click', e => {
   const act = el.dataset.act;
   if (act === 'buy') { G.sel = +el.dataset.id; buyItem(+el.dataset.id); }
   else if (act === 'jet') { G.sel = +el.dataset.id; deployJet(+el.dataset.id); }
+  else if (act === 'jetbuy' || act === 'jetup') { G.sel = +el.dataset.id; jetAction(+el.dataset.id); }
   else if (act === 'part') { G.blueprint[+el.dataset.slot] = +el.dataset.val; buildPanel(); }
   else if (act === 'build') buildJet(JET_BUILD_COST);
   else if (act === 'random') randomJet(JET_RANDOM_COST);
@@ -3053,6 +3186,44 @@ function renderStats() {
        '<div><span>射速</span><b>+' + (j.rate * 100).toFixed(0) + '%</b></div></div>';
   return h;
 }
+function jetAction(cid) {
+  const cat = JET_CATALOG[cid];
+  if (!cat) return;
+  if (jetOwnedIdx(cid) >= 0) upgradeJet(cid);
+  else buyJet(cid);
+  buildPanel();
+}
+
+function renderJets() {
+  let h = '<div class="sect">战机商店 · 买下即出战，之后可在本页继续升级</div>';
+  for (let c = 0; c < JET_CATALOG.length; c++) {
+    const cat = JET_CATALOG[c];
+    const oi = jetOwnedIdx(c);
+    const owned = oi >= 0;
+    const j = owned ? jets[oi] : null;
+    const equipped = owned && oi === G.activeJet;
+    const wp = WEAPONS[cat.weapon];
+    const maxed = owned && j.lvl >= JET_MAX_LVL;
+    const price = owned ? (maxed ? 0 : upCost(j)) : cat.price;
+    const canPay = owned ? (maxed || G.gold >= price) : G.gold >= price;
+    h += '<div class="row' + (equipped ? ' sel' : '') + (canPay ? '' : ' poor') +
+         '" data-act="' + (owned ? 'jetup' : 'jetbuy') + '" data-id="' + c + '">' +
+         '<span class="ico" style="color:' + cat.col + ';font-size:10.5px">T' + cat.tier + '</span>' +
+         '<span class="nm">' + cat.name +
+           ' <span style="color:#5a7398;font-size:10.5px">' + cat.code + '</span>' +
+           (equipped ? ' <span style="color:#5ff0ff;font-size:10px">出战</span>' : '') +
+           ' <span style="color:#3f5a7c;font-size:10.5px">· ' + cat.desc + '</span></span>' +
+         '<span class="ef" style="min-width:132px;text-align:right">' + wp.name +
+           (owned ? ' · Lv' + j.lvl + '/' + JET_MAX_LVL : '') + '</span>' +
+         '<span class="pr" style="min-width:66px">' +
+           (owned ? (maxed ? 'MAX' : price + '$') : price + '$') + '</span></div>';
+  }
+  h += '<div class="sect">说明</div><div class="empty" style="line-height:1.9">' +
+       '越贵的机体武器越强：单管机炮 → 三管阵列 → 聚焦激光 → 五管齐射 → 重炮。<br>' +
+       '升级上限 ' + JET_MAX_LVL + ' 级，费用 = 90 × 阶级 × 当前等级（低阶便宜、高阶贵），每级 +10% 伤害。</div>';
+  return h;
+}
+
 function renderHangar() {
   let h = '<div class="sect">机库 ' + jets.length + '/' + MAX_JETS + ' · 图纸 ' + comboCount() + '/256</div>';
   for (let i = 0; i < jets.length; i++) {
@@ -3060,7 +3231,8 @@ function renderHangar() {
     h += '<div class="row' + (i === G.sel ? ' sel' : '') + '" data-act="jet" data-id="' + i + '">' +
          '<span class="nm" style="font-weight:600">' + j.code + '</span>' +
          '<span class="sttag" style="color:' + STYLE_COL[j.style] + '">' + STYLE_NAME[j.style] + '</span>' +
-         '<span class="nm" style="flex:1;text-align:right;color:#8fb4d8">' + j.label + '</span>' +
+         '<span class="nm" style="flex:1;text-align:right;color:#8fb4d8">' +
+           WEAPONS[j.weapon].name + ' · Lv' + j.lvl + '</span>' +
          '<span class="pr" style="min-width:30px">' + (i === G.activeJet ? '出战' : '') + '</span></div>';
   }
   const cs = clamp(G.sel, 0, jets.length - 1), cj = jets[cs];
@@ -3113,8 +3285,9 @@ function renderBlueprints() {
 function buildPanel() {
   const st = bodyEl.scrollTop;
   if (G.tab === 0) bodyEl.innerHTML = renderShop();
-  else if (G.tab === 1) bodyEl.innerHTML = renderStats();
-  else if (G.tab === 2) bodyEl.innerHTML = renderHangar();
+  else if (G.tab === 1) bodyEl.innerHTML = renderJets();
+  else if (G.tab === 2) bodyEl.innerHTML = renderStats();
+  else if (G.tab === 3) bodyEl.innerHTML = renderHangar();
   else bodyEl.innerHTML = renderBlueprints();
   bodyEl.scrollTop = st;
   footEl.innerHTML = '<span>伤害 <b>' + stats().damage.toFixed(0) + '</b></span>' +
@@ -3346,7 +3519,13 @@ function boot() {
     }
     /* 先跑一段，让画面里有敌人和弹幕 */
     for (let i = 0; i < 240; i++) update(1 / 60);
-    if (params.has('shop')) { setTab(clamp(+params.get('shop') || 0, 0, 3)); openShop(); }
+    if (params.has('jet')) {             /* 调试：直接换上指定战机 */
+      const cid = clamp(+params.get('jet') || 0, 0, JET_CATALOG.length - 1);
+      const oi = jetOwnedIdx(cid);
+      if (oi >= 0) G.activeJet = oi;
+      else { G.gold += JET_CATALOG[cid].price; buyJet(cid); }
+    }
+    if (params.has('shop')) { setTab(clamp(+params.get('shop') || 0, 0, 4)); openShop(); }
     if (params.has('hexshot')) { G.hexOpen = false; offerHex(); }
     startLoop();
     return;
@@ -3477,10 +3656,10 @@ function runPlaytest() {
   ok('Tab 打开补给站', G.shopOpen && shopModal.classList.contains('show'));
   ok('商店行已渲染', !!document.querySelector('[data-act="buy"][data-id="0"]'));
 
-  setTab(2);
-  ok('切到机库页', G.tab === 2 && !!document.querySelector('[data-act="jet"]'));
-
   setTab(3);
+  ok('切到机库页', G.tab === 3 && !!document.querySelector('[data-act="jet"]'));
+
+  setTab(4);
   const chip = document.querySelector('[data-act="part"][data-slot="0"][data-val="3"]');
   ok('图纸芯片渲染', !!chip);
   if (chip) { chip.click(); ok('点击切换机身部件', G.blueprint[0] === 3); }
@@ -3489,6 +3668,22 @@ function runPlaytest() {
   const jn = jets.length;
   tap('b');
   ok('B 组装新机', jets.length === jn + 1, '机库 ' + jets.length + ' 架');
+
+  /* ---------- 战机商店：买机 + 升级 ---------- */
+  G.gold = 5000;
+  setTab(1);
+  const jrow = document.querySelector('[data-act="jetbuy"]');
+  ok('战机商店渲染', !!jrow);
+  const jn2 = jets.length;
+  if (jrow) { jrow.click(); }
+  ok('购买战机', jets.length === jn2 + 1, '机库 ' + jets.length + ' 架');
+  const lvBefore = jets.map(j => j.lvl).join(',');
+  const uprow = document.querySelector('[data-act="jetup"]');
+  ok('已购战机出现升级项', !!uprow);
+  if (uprow) uprow.click();
+  ok('点击升级生效', jets.map(j => j.lvl).join(',') !== lvBefore,
+     lvBefore + ' → ' + jets.map(j => j.lvl).join(','));
+  ok('升级后属性有武器加成', stats().damage > 0);
 
   setTab(0);
   G.gold = 1000;
