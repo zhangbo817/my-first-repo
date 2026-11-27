@@ -14,34 +14,47 @@
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
     font:14px/1.5 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;overflow:hidden;
     -webkit-font-smoothing:antialiased}
-  #wrap{display:flex;height:100vh;height:100dvh}
-  #stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden}
+  #wrap{display:block;height:100vh;height:100dvh}
+  #stage{position:relative;width:100%;height:100%;overflow:hidden}
   #stage canvas{display:block;cursor:crosshair}
   #hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);color:#41546f;
     font-size:11.5px;letter-spacing:.5px;pointer-events:none;user-select:none;
     white-space:nowrap;transition:opacity .8s}
-  #panelToggle{display:none;position:absolute;right:14px;bottom:14px;z-index:20;
-    padding:8px 12px;border-radius:9px;border:1px solid #24425f;background:#0b1626;
-    color:#9fc8e8;font-family:inherit;font-size:12px;cursor:pointer}
+  #topright{position:absolute;right:14px;top:12px;display:flex;gap:8px;z-index:20}
+  .hbtn{padding:9px 14px;border-radius:10px;border:1px solid #24425f;
+    background:linear-gradient(180deg,#0e1a2c,#0a1220);color:#a8cde8;font-family:inherit;
+    font-size:12.5px;cursor:pointer;letter-spacing:1px;transition:.15s;
+    box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .hbtn:hover{color:#eafcff;border-color:#3c76a2;box-shadow:0 0 16px rgba(95,240,255,.18)}
+  .hbtn kbd{font-family:inherit;font-size:10px;color:#5f88b0;border:1px solid #1d3450;
+    border-radius:4px;padding:1px 4px;margin-left:5px}
+  .hbtn .dot{color:var(--gold);margin-left:4px}
 
-  /* ---------- 侧边面板 ---------- */
-  #panel{width:366px;flex:0 0 366px;display:flex;flex-direction:column;
+  /* ---------- 商店弹窗 ---------- */
+  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    z-index:60;background:rgba(3,6,12,.74);backdrop-filter:blur(4px)}
+  .modal.show{display:flex;animation:fade .18s ease-out}
+  .mpanel{width:min(720px,94vw);max-height:88vh;display:flex;flex-direction:column;
     background:linear-gradient(180deg,#0a1122 0%,#070b15 100%);
-    border-left:1px solid var(--line);box-shadow:-18px 0 40px rgba(0,0,0,.5);z-index:5}
-  .brand{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
-  .brand b{font-size:15px;letter-spacing:1.2px;color:#eaf6ff}
-  .brand .ver{font-size:10px;color:var(--cyan);border:1px solid #1d3b57;
-    border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:2px}
-  .brand .sub{font-size:11px;color:var(--dim);letter-spacing:.6px;margin-top:3px}
-  .tabs{display:flex;gap:6px;padding:10px 12px 8px}
+    border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    box-shadow:0 30px 90px rgba(0,0,0,.75),0 0 0 1px rgba(95,240,255,.05) inset}
+  .mhead{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 16px 8px;border-bottom:1px solid var(--line)}
+  .mtitle{font-size:14px;letter-spacing:1.2px;color:#eaf6ff}
+  .mtitle small{color:#4f6a94;letter-spacing:.6px;font-size:11px;margin-left:8px}
+  .mclose{background:transparent;border:1px solid #24425f;color:#7fa8cc;
+    width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-family:inherit}
+  .mclose:hover{color:#fff;border-color:#3c76a2}
+
+  .tabs{display:flex;gap:6px;padding:10px 14px 2px}
   .tabs button{flex:1;padding:7px 0;font-size:12.5px;color:var(--dim);cursor:pointer;
     background:#0a1220;border:1px solid var(--line);border-radius:7px;
     font-family:inherit;transition:.15s}
   .tabs button:hover{color:#dfefff;border-color:#26476b}
   .tabs button.on{color:#06121c;background:linear-gradient(180deg,#7ff4ff,#3fd7ee);
     border-color:#7ff4ff;font-weight:700;box-shadow:0 0 14px rgba(95,240,255,.35)}
-  #tabbody{flex:1 1 auto;overflow-y:auto;padding:2px 10px 10px;scrollbar-width:thin;
-    scrollbar-color:#1e3454 transparent}
+  #tabbody{flex:1 1 auto;min-height:0;overflow-y:auto;padding:2px 10px 10px;
+    scrollbar-width:thin;scrollbar-color:#1e3454 transparent}
   #tabbody::-webkit-scrollbar{width:8px}
   #tabbody::-webkit-scrollbar-thumb{background:#1e3454;border-radius:4px}
   .pfoot{padding:8px 14px;border-top:1px solid var(--line);font-size:11.5px;
@@ -97,6 +110,40 @@
   .sttag{display:inline-block;font-size:9.5px;padding:1px 5px;border-radius:4px;
     border:1px solid currentColor;margin-left:4px;vertical-align:1px}
 
+  /* ---------- 强化三选一 ---------- */
+  .hexpanel{width:min(1000px,96vw);text-align:center;padding:8px 6px}
+  .hexhead h2{margin:0;font-size:26px;letter-spacing:8px;color:#eafcff;
+    text-shadow:0 0 30px rgba(95,240,255,.45)}
+  .hexhead p{margin:8px 0 0;color:#7f9cc0;font-size:12.5px;letter-spacing:1px}
+  .hexcards{display:flex;gap:16px;justify-content:center;margin-top:22px;flex-wrap:wrap}
+  .hcard{width:286px;min-height:214px;border-radius:16px;padding:18px 18px 16px;
+    cursor:pointer;text-align:left;position:relative;overflow:hidden;
+    background:linear-gradient(180deg,rgba(16,26,44,.98),rgba(9,14,24,.98));
+    border:1px solid #1e3450;transition:transform .15s,border-color .15s,box-shadow .15s}
+  .hcard:hover{transform:translateY(-6px);border-color:#3c76a2;
+    box-shadow:0 18px 40px rgba(0,0,0,.55)}
+  .hcard .hnum{position:absolute;right:12px;top:10px;font-size:11px;color:#3f5a7c}
+  .hcard .rar{font-size:10.5px;letter-spacing:3px;font-weight:700}
+  .hcard .hname{font-size:19px;font-weight:700;color:#eafcff;margin:8px 0 10px;
+    letter-spacing:1px}
+  .hcard .hdesc{font-size:13px;color:#a8c4de;line-height:1.75;min-height:56px}
+  .hcard .hmeta{margin-top:12px;font-size:11px;color:#5f88b0;display:flex;
+    justify-content:space-between;align-items:center}
+  .hcard .hbar{height:4px;border-radius:2px;background:#16243f;margin-top:10px;overflow:hidden}
+  .hcard .hbar i{display:block;height:100%;border-radius:2px}
+  .hcard.s1{border-color:#5f7791}
+  .hcard.s1 .rar{color:#c8d8e8}
+  .hcard.s1 .hbar i{background:linear-gradient(90deg,#5f7791,#c8d8e8)}
+  .hcard.s2{border-color:#8a6b22}
+  .hcard.s2 .rar{color:#ffd75f}
+  .hcard.s2 .hbar i{background:linear-gradient(90deg,#8a6b22,#ffd75f)}
+  .hcard.s3{border-color:#6b3aa8;
+    background:linear-gradient(180deg,rgba(34,18,56,.98),rgba(12,8,22,.98))}
+  .hcard.s3 .rar{color:#d9a6ff}
+  .hcard.s3 .hbar i{background:linear-gradient(90deg,#b06cff,#5ff0ff)}
+  .hcard.s3:hover{border-color:#b06cff;box-shadow:0 18px 44px rgba(150,80,255,.35)}
+  .hexhint{margin-top:18px;color:#41546f;font-size:11.5px;letter-spacing:1px}
+
   /* ---------- 覆盖层 ---------- */
   #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 45%,rgba(8,16,30,.82),rgba(2,4,9,.96));
@@ -125,11 +172,9 @@
   .kpi div{min-width:86px}
   .kpi span{display:block;font-size:10.5px;color:#5f7fa3;letter-spacing:1px}
   .kpi b{font-size:19px;color:#eafcff;font-variant-numeric:tabular-nums}
-  @media (max-width:980px){
-    #panel{position:absolute;right:0;top:0;bottom:0;width:330px;flex-basis:330px;
-      transform:translateX(102%);transition:transform .25s}
-    #panel.open{transform:none}
-    #panelToggle{display:block}
+  @media (max-width:700px){
+    .hexcards{gap:10px}
+    .hcard{width:46%;min-height:200px}
   }
 </style>
 </head>
@@ -137,13 +182,19 @@
 <div id="wrap">
   <div id="stage">
     <canvas id="cv"></canvas>
-    <div id="hint">WASD 移动 · 鼠标瞄准 · 按住左键开火 · Shift 冲刺 · Tab 面板</div>
-    <button id="panelToggle">面板 ▸</button>
+    <div id="hint">WASD 移动 · 鼠标瞄准 · 左键开火 · Shift 冲刺 · Tab 商店</div>
+    <div id="topright">
+      <button id="shopBtn" class="hbtn">补给站<kbd>Tab</kbd><span class="dot" id="shopDot"></span></button>
+    </div>
   </div>
-  <aside id="panel">
-    <div class="brand">
-      <b>DEEP SPACE OUTPOST</b><span class="ver">v2</span>
-      <div class="sub">深空前哨 · 30 关 · BOSS · 机库</div>
+</div>
+
+<!-- 商店 / 强化 / 机库 / 图纸 -->
+<div id="shopModal" class="modal">
+  <div class="mpanel">
+    <div class="mhead">
+      <div class="mtitle">补给站<small>Tab 打开 / 关闭 · 数字键切页</small></div>
+      <button class="mclose" id="shopClose">✕</button>
     </div>
     <div class="tabs" id="tabs">
       <button data-tab="0" class="on">商店</button>
@@ -153,7 +204,19 @@
     </div>
     <div id="tabbody"></div>
     <div class="pfoot" id="pfoot"></div>
-  </aside>
+  </div>
+</div>
+
+<!-- 每关通关后的三选一 -->
+<div id="hexModal" class="modal">
+  <div class="hexpanel">
+    <div class="hexhead">
+      <h2>强化</h2>
+      <p>第 <span id="hexWaveNum">1</span> 关 已清除 · 选一个，效果永久叠加</p>
+    </div>
+    <div id="hexcards" class="hexcards"></div>
+    <div class="hexhint">点击卡片，或按 1 / 2 / 3</div>
+  </div>
 </div>
 <div id="overlay"><div class="card" id="card"></div></div>
 <pre id="testout" hidden></pre>
@@ -205,6 +268,34 @@ const SHOP = [
   { name: '长管腔',     icon: 'L', maxLv: 8,  col: '#ffb454', base: 24, growth: 1.48 },
 ];
 const shopPrice = id => Math.round(SHOP[id].base * Math.pow(SHOP[id].growth, G.bought[id]));
+
+/* ---------------- 海克斯强化：每关通关三选一，永久叠加 ---------------- */
+const RAR_NAME = ['', '白银', '黄金', '棱彩'];
+const HEX = [
+  /* 白银 */
+  { id: 'h_dmg',    rar: 1, name: '动能增强', desc: '子弹伤害 +15%', max: 6, apply: s => { s.damage *= 1.15; } },
+  { id: 'h_rate',   rar: 1, name: '冷却回路', desc: '射击间隔 -8%', max: 6, apply: s => { s.interval *= .92; } },
+  { id: 'h_hp',     rar: 1, name: '附加装甲', desc: '最大生命 +25', max: 6, apply: s => { s.maxHp += 25; } },
+  { id: 'h_spd',    rar: 1, name: '推进优化', desc: '移动速度 +8%', max: 4, apply: s => { s.speedMul *= 1.08; } },
+  { id: 'h_gold',   rar: 1, name: '拾荒者',   desc: '金币获取 +15%', max: 4, apply: s => { s.goldMul *= 1.15; } },
+  { id: 'h_xp',     rar: 1, name: '学习芯片', desc: '经验获取 +15%', max: 4, apply: s => { s.xpMul *= 1.15; } },
+  { id: 'h_pick',   rar: 1, name: '磁力场',   desc: '金币拾取半径 +40', max: 4, apply: s => { s.pickupR += 40; } },
+  /* 黄金 */
+  { id: 'h_over',   rar: 2, name: '过载核心', desc: '子弹伤害 +30%，最大生命 -10%', max: 3, apply: s => { s.damage *= 1.30; s.maxHp *= .90; } },
+  { id: 'h_crit',   rar: 2, name: '裂解瞄准', desc: '暴击率 +12%', max: 3, apply: s => { s.crit += .12; } },
+  { id: 'h_cdmg',   rar: 2, name: '致命打击', desc: '暴击伤害 +50%', max: 3, apply: s => { s.critDmg += .5; } },
+  { id: 'h_armor',  rar: 2, name: '相位护盾', desc: '受到伤害 -15%', max: 3, apply: s => { s.armor = 1 - (1 - s.armor) * .85; } },
+  { id: 'h_leech',  rar: 2, name: '吸血涂层', desc: '击杀回复 3 点生命', max: 3, apply: s => { s.leech += 3; } },
+  { id: 'h_link',   rar: 2, name: '穿甲弹芯', desc: '子弹贯穿 +1', max: 2, apply: s => { s.link += 1; } },
+  { id: 'h_boss',   rar: 2, name: '猎杀协议', desc: '对 BOSS 伤害 +25%', max: 3, apply: s => { s.bossMul *= 1.25; } },
+  { id: 'h_dash',   rar: 2, name: '瞬步',     desc: '冲刺冷却 -25%', max: 3, apply: s => { s.dashMul *= .75; } },
+  /* 棱彩 */
+  { id: 'h_multi',  rar: 3, name: '多管齐射', desc: '每次开火 +1 发子弹', max: 2, apply: s => { s.bulletCount += 1; } },
+  { id: 'h_boom',   rar: 3, name: '崩解弹',   desc: '击杀敌人时引发小范围爆炸', max: 1, apply: s => { s.killBoom = 1; } },
+  { id: 'h_shock',  rar: 3, name: '冲击波',   desc: '冲刺结束时震伤周围敌人', max: 1, apply: s => { s.dashBoom = 1; } },
+  { id: 'h_allcrit', rar: 3, name: '全弹暴击', desc: '暴击率 +25%，暴击伤害 +30%', max: 2, apply: s => { s.crit += .25; s.critDmg += .3; } },
+  { id: 'h_fast',   rar: 3, name: '超载协议', desc: '射速 +25%，弹速与射程 +20%', max: 2, apply: s => { s.interval *= .8; s.rangeMul += .2; } },
+];
 
 function shopEffect(id, lv) {
   switch (id) {
@@ -291,6 +382,7 @@ const G = {
   gold: 0, level: 1, xp: 0, waveLeft: 0, spawnTimer: 0,
   between: false, waveGap: 0, finalPhase: false, bossAlive: false,
   bought: new Array(SHOP_N).fill(0),
+  hex: {}, hexChoices: [], hexOpen: false, shopOpen: false,
   tab: 0, sel: 0, autoFire: false,
   activeJet: 0, blueprint: [0, 0, 0, 0], comboSeen: new Uint8Array(32),
   banner: '', bannerLife: 0, bannerCol: '#fff',
@@ -432,12 +524,18 @@ function stats() {
     luck: b[S_LUCK] * .012,
     dashMul: 1 - b[S_DASH] * .09,
     rangeMul: 1 + b[S_RANGE] * .10,
+    critDmg: 2.2, killBoom: 0, dashBoom: 0,
   };
   const j = jetBonus(G.activeJet);
   s.damage *= 1 + j.dmg;
   s.maxHp *= 1 + j.hp;
   s.speedMul *= 1 + j.spd;
   s.interval *= 1 - clamp(j.rate, 0, .55);
+  /* 海克斯强化叠加 */
+  for (const h of HEX) {
+    const n = G.hex[h.id] || 0;
+    for (let i = 0; i < n; i++) h.apply(s);
+  }
   return s;
 }
 
@@ -561,6 +659,11 @@ function startGame(keepHangar) {
   G.waveLeft = 0; G.spawnTimer = 0; G.between = false; G.waveGap = 0;
   G.finalPhase = false; G.bossAlive = false;
   G.bought = new Array(SHOP_N).fill(0);
+  G.hex = {}; G.hexChoices = []; G.hexOpen = false; G.shopOpen = false;
+  const _sm = document.getElementById('shopModal');
+  const _hm = document.getElementById('hexModal');
+  if (_sm) _sm.classList.remove('show');
+  if (_hm) _hm.classList.remove('show');
   G.banner = ''; G.bannerLife = 0; G.tab = 0; G.sel = 0;
 
   P.x = WORLD_W / 2; P.y = WORLD_H * .62; P.hp = P.maxHp = 100;
@@ -669,6 +772,23 @@ function killEnemy(i) {
 
   const s = stats();
   if (s.leech > 0) heal(s.leech);
+
+  /* 海克斯：崩解弹（击杀爆炸），用 G.boomOn 防止连锁递归 */
+  if (s.killBoom && !G.boomOn) {
+    G.boomOn = true;
+    burst(ex, ey, '#ff9f6a', 14, 220, .45);
+    const rr = 92;
+    for (let j = 0; j < enemies.length; j++) {
+      const o = enemies[j];
+      if (o.dead) continue;
+      if (dist2(o.x, o.y, ex, ey) < rr * rr) {
+        o.hp -= 14 + G.level * 2;
+        o.hitFlash = 1;
+        if (o.hp <= 0) killEnemy(j);
+      }
+    }
+    G.boomOn = false;
+  }
 
   if (e.isBoss) {
     G.bossAlive = false;
@@ -1209,6 +1329,19 @@ function update(dt) {
     P.x += P.dashDx * spd * 2.9 * dt;
     P.y += P.dashDy * spd * 2.9 * dt;
     if (Math.random() < .6) burst(P.x, P.y, '#5ff0ff', 1, 40, .35);
+    if (P.dashTime <= 0 && s.dashBoom) {          /* 海克斯：冲击波 */
+      burst(P.x, P.y, '#9ff7ff', 22, 300, .55);
+      shake = Math.max(shake, 5);
+      for (let i = 0; i < enemies.length; i++) {
+        const en = enemies[i];
+        if (en.dead) continue;
+        if (dist2(en.x, en.y, P.x, P.y) < 118 * 118) {
+          en.hp -= 22 + G.level * 3;
+          en.hitFlash = 1;
+          if (en.hp <= 0) killEnemy(i);
+        }
+      }
+    }
   } else {
     P.x += mx * spd * dt;
     P.y += my * spd * dt;
@@ -1247,7 +1380,7 @@ function update(dt) {
       if (b.hits.indexOf(e.uid) >= 0) continue;
       const rr = b.r + e.r;
       if (dist2(b.x, b.y, e.x, e.y) < rr * rr) {
-        let dmg = b.crit ? b.dmg * 2.2 : b.dmg;
+        let dmg = b.crit ? b.dmg * s.critDmg : b.dmg;
         if (e.isBoss) dmg *= s.bossMul;
         e.hp -= dmg; e.hitFlash = 1; G.hits++;
         burst(b.x, b.y, b.crit ? '#ffd75f' : '#ffffff', b.crit ? 5 : 2, 110, .22);
@@ -1394,6 +1527,7 @@ function update(dt) {
       if (G.wave >= MAX_WAVE) {
         G.finalPhase = true;
         G.waveLeft = 0;
+        offerHex();                    /* 最终 BOSS 前再给一次强化 */
         spawnBoss(true);
         banner('最终 BOSS · 终焉·母舰', '#ffd75f');
         sfx(70, .9, 'sawtooth', .6, .5);
@@ -1405,6 +1539,7 @@ function update(dt) {
         addFloater(P.x, P.y - 46, '+' + bonus + ' 过关奖励', '#ffd75f');
         banner('区域清除', '#5ff0ff');
         sfx(520, .12, 'square', .35);
+        offerHex();                    /* 每关通关 → 三选一强化 */
       }
     }
   } else if (G.between) {
@@ -2336,9 +2471,9 @@ function drawHUD() {
   /* HP */
   const hpw = 230, hph = 9;
   ctx.fillStyle = 'rgba(4,8,16,.72)';
-  ctx.fillRect(pad - 6, pad - 6, hpw + 12, hph + 30);
+  ctx.fillRect(pad - 6, pad - 6, hpw + 12, hph + 52);
   ctx.strokeStyle = 'rgba(95,240,255,.14)';
-  ctx.strokeRect(pad - 6.5, pad - 6.5, hpw + 13, hph + 31);
+  ctx.strokeRect(pad - 6.5, pad - 6.5, hpw + 13, hph + 53);
   ctx.fillStyle = 'rgba(255,255,255,.10)';
   ctx.fillRect(pad, pad, hpw, hph);
   const hpr = clamp(P.hp / P.maxHp, 0, 1);
@@ -2375,14 +2510,14 @@ function drawHUD() {
   const waveTxt = G.finalPhase ? '最终 BOSS' : '第 ' + G.wave + ' / ' + MAX_WAVE + ' 关';
   ctx.fillText(waveTxt + (G.waveLeft > 0 ? '   剩余 ' + G.waveLeft : '   区域清除'), VW / 2, pad + 12);
 
-  /* 右上：金币 / 击杀 / 分数 */
-  ctx.textAlign = 'right';
-  ctx.font = '700 15px "Segoe UI",system-ui,sans-serif';
+  /* 金币 / 击杀（放左上，右上留给按钮） */
+  ctx.textAlign = 'left';
+  ctx.font = '700 13px "Segoe UI",system-ui,sans-serif';
   ctx.fillStyle = '#ffd75f';
-  ctx.fillText(G.gold + ' $', VW - pad, pad + 14);
-  ctx.font = '600 12px "Segoe UI",system-ui,sans-serif';
+  ctx.fillText(G.gold + ' $', pad + 4, pad + hph + 40);
+  ctx.font = '600 11.5px "Segoe UI",system-ui,sans-serif';
   ctx.fillStyle = '#8fb4d8';
-  ctx.fillText('击杀 ' + G.kills + '   分数 ' + nf(G.score), VW - pad, pad + 32);
+  ctx.fillText('击杀 ' + G.kills + ' · 分数 ' + nf(G.score), pad + 96, pad + hph + 40);
 
   /* BOSS 血条 */
   const boss = enemies.find(e => e.isBoss && !e.dead);
@@ -2638,12 +2773,28 @@ window.addEventListener('keydown', e => {
   if (e.repeat) { keys[k] = true; return; }
   keys[k] = true;
   if (!G.started) { if (k === 'enter' || k === ' ') startFromMenu(); return; }
+
+  /* 强化三选一：1/2/3 或点击 */
+  if (G.hexOpen) {
+    if (k >= '1' && k <= '3') pickHex(+k - 1);
+    return;
+  }
+  /* 商店打开时：数字键切页，Tab/Esc 关闭 */
+  if (G.shopOpen) {
+    if (k === 'tab' || k === 'escape') { closeShop(); return; }
+    if (k >= '1' && k <= '4') { setTab(+k - 1); return; }
+    if (k === 'arrowup') { navSel(-1); return; }
+    if (k === 'arrowdown') { navSel(1); return; }
+    if (k === 'enter') { confirmSel(); return; }
+    if (k === 'b' && G.tab === 3) { buildJet(JET_BUILD_COST); return; }
+    if (k === 'g' && G.tab === 3) { randomJet(JET_RANDOM_COST); return; }
+    if (k === 'f' && G.tab === 2) { doFuse(); return; }
+    if (k === 'm') { AU.muted = !AU.muted; return; }
+    return;
+  }
+
   switch (k) {
-    case 'tab': {
-      const nb = ((e.shiftKey ? G.tab + 3 : G.tab + 1) % 4);
-      setTab(nb);
-      break;
-    }
+    case 'tab': if (!G.over && !G.victory) openShop(); break;
     case 'arrowup':   navSel(-1); break;
     case 'arrowdown': navSel(1); break;
     case 'arrowleft': changePart(-1); break;
@@ -2671,11 +2822,32 @@ window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
 
 /* =========================================================================
-   面板 UI
+   补给站弹窗 + 强化三选一
    ========================================================================= */
 const tabsEl = document.getElementById('tabs');
 const bodyEl = document.getElementById('tabbody');
 const footEl = document.getElementById('pfoot');
+const shopModal = document.getElementById('shopModal');
+const hexModal = document.getElementById('hexModal');
+const hexCards = document.getElementById('hexcards');
+const shopDot = document.getElementById('shopDot');
+
+function openShop() {
+  if (G.hexOpen) return;
+  G.shopOpen = true;
+  shopModal.classList.add('show');
+  buildPanel();
+  sfx(520, .06, 'square', .18);
+}
+function closeShop() {
+  G.shopOpen = false;
+  shopModal.classList.remove('show');
+}
+function toggleShop() { G.shopOpen ? closeShop() : openShop(); }
+
+document.getElementById('shopBtn').addEventListener('click', () => { audioInit(); toggleShop(); });
+document.getElementById('shopClose').addEventListener('click', closeShop);
+shopModal.addEventListener('click', e => { if (e.target === shopModal) closeShop(); });
 
 function setTab(t) {
   G.tab = t; G.sel = 0;
@@ -2685,6 +2857,68 @@ function setTab(t) {
 tabsEl.addEventListener('click', e => {
   const b = e.target.closest('[data-tab]');
   if (b) { audioInit(); setTab(+b.dataset.tab); }
+});
+
+/* ---- 强化抽卡 ---- */
+function hexStack(id) { return G.hex[id] || 0; }
+function rollHexes() {
+  const pool = HEX.filter(h => hexStack(h.id) < h.max);
+  if (pool.length <= 3) return pool.slice();
+  const bag = [];
+  for (const h of pool) {
+    const w = h.rar === 3 ? 1 : h.rar === 2 ? 3 : 6;   /* 白银更常见 */
+    for (let i = 0; i < w; i++) bag.push(h);
+  }
+  const picks = [];
+  let guard = 0;
+  while (picks.length < 3 && guard++ < 400) {
+    const h = bag[Math.floor(Math.random() * bag.length)];
+    if (picks.indexOf(h) < 0) picks.push(h);
+  }
+  return picks;
+}
+function hexCardHTML(h, i) {
+  const n = hexStack(h.id);
+  return '<div class="hcard s' + h.rar + '" data-hex="' + i + '">' +
+    '<div class="hnum">' + (i + 1) + '</div>' +
+    '<div class="rar">' + RAR_NAME[h.rar] + '</div>' +
+    '<div class="hname">' + h.name + '</div>' +
+    '<div class="hdesc">' + h.desc + '</div>' +
+    '<div class="hmeta"><span>' + (n ? '已叠加 ' + n + ' 层' : '尚未获得') + '</span>' +
+    '<span>' + (h.max > 1 ? '上限 ' + h.max + ' 层' : '唯一') + '</span></div>' +
+    '<div class="hbar"><i style="width:' + Math.round(n / h.max * 100) + '%"></i></div>' +
+    '</div>';
+}
+function offerHex() {
+  const picks = rollHexes();
+  if (!picks.length) return;
+  G.hexChoices = picks;
+  /* 无头自测 / 截图模式：自动选一个，不弹窗 */
+  if (G.autotest || (G.shotMode && !params.has('hexshot'))) {
+    pickHex(Math.floor(Math.random() * picks.length));
+    return;
+  }
+  G.hexOpen = true;
+  document.getElementById('hexWaveNum').textContent = G.wave - 1;
+  hexCards.innerHTML = picks.map((h, i) => hexCardHTML(h, i)).join('');
+  hexModal.classList.add('show');
+  sfx(660, .12, 'sine', .35);
+}
+function pickHex(i) {
+  const h = G.hexChoices[i];
+  if (!h) return;
+  G.hex[h.id] = hexStack(h.id) + 1;
+  G.hexOpen = false;
+  G.hexChoices = [];
+  hexModal.classList.remove('show');
+  addFloater(P.x, P.y - 44, h.name + ' x' + G.hex[h.id], '#ffd75f');
+  banner('强化 · ' + h.name, h.rar === 3 ? '#d9a6ff' : h.rar === 2 ? '#ffd75f' : '#c8d8e8');
+  sfx(h.rar === 3 ? 880 : 700, .16, 'sine', .4, 1.4);
+  buildPanel();
+}
+hexCards.addEventListener('click', e => {
+  const c = e.target.closest('[data-hex]');
+  if (c) { audioInit(); pickHex(+c.dataset.hex); }
 });
 
 function tabMax() {
@@ -2773,12 +3007,29 @@ function renderStats() {
          '<span class="ef">' + shopEffect(id, G.bought[id]) + '</span></div>';
   }
   if (!any) h += '<div class="empty">（暂无，去商店购买）</div>';
+
+  /* 海克斯强化 */
+  h += '<div class="sect">已获得强化（海克斯）</div>';
+  let hx = false;
+  for (const d of HEX) {
+    const n = G.hex[d.id] || 0;
+    if (!n) continue;
+    hx = true;
+    const rc = d.rar === 3 ? '#d9a6ff' : d.rar === 2 ? '#ffd75f' : '#c8d8e8';
+    h += '<div class="row" style="cursor:default">' +
+         '<span class="ico" style="color:' + rc + '">×' + n + '</span>' +
+         '<span class="nm">' + d.name + '</span>' +
+         '<span class="lv" style="color:' + rc + '">' + RAR_NAME[d.rar] + '</span>' +
+         '<span class="ef">' + d.desc + '</span></div>';
+  }
+  if (!hx) h += '<div class="empty">（每关通关后三选一，效果永久叠加）</div>';
   const j = jetBonus(G.activeJet);
   const rows = [
     ['伤害', s.damage.toFixed(0)],
     ['射击间隔', (s.interval * 1000).toFixed(0) + 'ms'],
     ['弹数', s.bulletCount + ' 发'],
     ['暴击', (s.crit * 100).toFixed(0) + '%'],
+    ['暴击伤害', (s.critDmg * 100).toFixed(0) + '%'],
     ['生命', s.maxHp.toFixed(0)],
     ['受伤减免', ((1 - (1 - s.armor * .6)) * 100).toFixed(0) + '%'],
     ['移速', (s.speedMul * 100).toFixed(0) + '%'],
@@ -2994,9 +3245,9 @@ function togglePause() {
    主循环
    ========================================================================= */
 function syncPanel() {
-  /* 只在状态变化时重建 DOM，避免每帧 innerHTML */
+  if (!G.shopOpen) return;              /* 弹窗关着就不用重绘 */
   const sig = [G.tab, G.sel, G.gold, G.wave, G.level, jets.length, G.activeJet,
-               G.bought.join(''), G.blueprint.join(''),
+               G.bought.join(''), G.blueprint.join(''), JSON.stringify(G.hex),
                (G.over ? 1 : 0), (G.victory ? 1 : 0)].join('|');
   if (syncPanel._sig !== sig) {
     syncPanel._sig = sig;
@@ -3011,7 +3262,7 @@ function loop(ts) {
   let dt = (ts - lastTs) / 1000;
   lastTs = ts;
   if (dt > .1) dt = .1;
-  if (!G.paused) {
+  if (!G.paused && !G.shopOpen && !G.hexOpen) {
     acc += dt;
     let steps = 0;
     while (acc >= 1 / 60 && steps < 4) { update(1 / 60); acc -= 1 / 60; steps++; }
@@ -3036,10 +3287,6 @@ document.addEventListener('visibilitychange', () => {
    ========================================================================= */
 const params = new URLSearchParams(location.search);
 const hintEl = document.getElementById('hint');
-
-document.getElementById('panelToggle').addEventListener('click', () => {
-  document.getElementById('panel').classList.toggle('open');
-});
 
 function boot() {
   resize();
@@ -3099,6 +3346,8 @@ function boot() {
     }
     /* 先跑一段，让画面里有敌人和弹幕 */
     for (let i = 0; i < 240; i++) update(1 / 60);
+    if (params.has('shop')) { setTab(clamp(+params.get('shop') || 0, 0, 3)); openShop(); }
+    if (params.has('hexshot')) { G.hexOpen = false; offerHex(); }
     startLoop();
     return;
   }
@@ -3216,17 +3465,22 @@ function runPlaytest() {
   const ku = k => window.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true }));
   const tap = k => { kd(k); ku(k); };
 
-  startLoop();            /* 让画布有尺寸，渲染可用 */
-  showOverlay('start');   /* 自测从真实的开始界面起步 */
+  startLoop();
+  showOverlay('start');
   ok('初始停在开始界面', !G.started && G.paused);
 
   tap('Enter');
   ok('Enter 开始游戏', G.started && !G.paused);
 
-  tap('Tab'); ok('Tab → 强化面板', G.tab === 1);
-  tap('Tab'); ok('Tab → 机库面板', G.tab === 2);
-  tap('Tab'); ok('Tab → 图纸面板', G.tab === 3);
+  /* ---------- 补给站弹窗 ---------- */
+  tap('Tab');
+  ok('Tab 打开补给站', G.shopOpen && shopModal.classList.contains('show'));
+  ok('商店行已渲染', !!document.querySelector('[data-act="buy"][data-id="0"]'));
 
+  setTab(2);
+  ok('切到机库页', G.tab === 2 && !!document.querySelector('[data-act="jet"]'));
+
+  setTab(3);
   const chip = document.querySelector('[data-act="part"][data-slot="0"][data-val="3"]');
   ok('图纸芯片渲染', !!chip);
   if (chip) { chip.click(); ok('点击切换机身部件', G.blueprint[0] === 3); }
@@ -3242,6 +3496,20 @@ function runPlaytest() {
   ok('商店行渲染', !!row);
   if (row) { row.click(); ok('点击购买', G.bought[0] === 1, 'Lv' + G.bought[0]); }
 
+  tap('Tab');
+  ok('再按 Tab 关闭补给站', !G.shopOpen && !shopModal.classList.contains('show'));
+
+  /* ---------- 强化三选一 ---------- */
+  offerHex();
+  ok('通关后弹出三选一', G.hexOpen && hexModal.classList.contains('show'));
+  const cards = document.querySelectorAll('[data-hex]');
+  ok('恰好三张强化卡', cards.length === 3, cards.length + ' 张');
+  const before = JSON.stringify(G.hex);
+  if (cards.length) cards[0].click();
+  ok('点击选中强化', !G.hexOpen && JSON.stringify(G.hex) !== before, JSON.stringify(G.hex));
+  ok('强化已计入属性', stats().damage >= 12);
+
+  /* ---------- 战斗输入 ---------- */
   tap(' ');
   ok('空格切换连发', G.autoFire === true);
 
@@ -3256,19 +3524,16 @@ function runPlaytest() {
   window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
   ok('松手停火', mouse.down === false);
 
-  /* 移动 */
   const px0 = P.x;
   kd('d');
   for (let i = 0; i < 20; i++) update(1 / 60);
   ku('d');
   ok('D 键右移', P.x > px0 + 1, 'x ' + px0.toFixed(0) + '→' + P.x.toFixed(0));
 
-  /* 冲刺 */
   const cd0 = P.dashCd;
   tap('Shift');
   ok('Shift 冲刺', P.dashTime > 0 && P.dashCd > cd0);
 
-  /* 渲染确实画出了东西 */
   render();
   let nonBlack = 0;
   try {
@@ -3280,7 +3545,6 @@ function runPlaytest() {
   tap('p'); ok('P 暂停', G.paused === true);
   tap('p'); ok('P 继续', G.paused === false);
 
-  /* 帧耗时（无头软件渲染，真实浏览器只会更快） */
   const t0p = performance.now();
   for (let i = 0; i < 30; i++) { update(1 / 60); render(); }
   const per = (performance.now() - t0p) / 30;
@@ -3288,8 +3552,8 @@ function runPlaytest() {
 
   tap('r');
   ok('R 重开回到第 1 关', G.wave === 1 && G.running && !G.over, '关卡 ' + G.wave);
+  ok('重开后强化清空', Object.keys(G.hex).length === 0);
 
-  /* 死亡流程 */
   P.hp = 1;
   G.shotMode = false;
   damagePlayer(50);
@@ -3300,7 +3564,6 @@ function runPlaytest() {
   tap('r');
   ok('死亡后 R 可重开', !G.over && G.running);
 
-  /* 通关弹窗 */
   G.victory = true; G.running = false;
   showOverlay('win');
   ok('通关弹窗渲染', card.innerHTML.indexOf('终焉·母舰') >= 0 && !!document.getElementById('btnAgain2'));
