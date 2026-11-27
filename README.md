@@ -22,7 +22,10 @@ git push              # upload to GitHub
 
 ### `game/` — C 语言小游戏
 
-一个用 C 语言写的控制台小游戏，含修复后的版本与网页版。
+**在线试玩：<https://zhangbo817.github.io/my-first-repo/>** （浏览器版，打开即玩，无需安装）
+
+一个用 C 语言写的控制台小游戏，含修复后的版本与网页版。仓库根目录的 `index.html` 是
+站点入口页（GitHub Pages 用），点「开始游戏」进入 `game/game.html`。
 
 | 文件 | 说明 |
 | --- | --- |
