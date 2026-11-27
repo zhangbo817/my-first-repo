@@ -543,7 +543,7 @@ function spawnStageElite(wave) {
     xp: b.xp * Math.sqrt(scale) * def.xpMul,
     phase: rnd(0, TAU), spawnAnim: 1, hitFlash: 0,
     isBoss: false, isFinal: false, stage: 0,
-    sei: st, cd: def.cd0, cd2: 0, castT: 0, spin: rnd(0, TAU),
+    sei: st, phase2: false, cd: def.cd0, cd2: 0, castT: 0, spin: rnd(0, TAU),
     chargeT: 0, dashT: 0, dashVx: 0, dashVy: 0,
     orbit: 0, bossName: '', dead: false,
   });
@@ -1058,39 +1058,54 @@ function aiFinal(e, dt) {
   }
 }
 
-/* ===== 阶段精英小怪：机制与同阶段 BOSS 同源，但更小更弱 ===== */
+/* ===== 阶段精英小怪：机制与同阶段 BOSS 同源；血量过半会"变态" ===== */
 function updateStageElite(e, dt) {
   const def = STAGE_ELITES[e.sei];
+  /* —— 变态：换一套外形 + 更强的技能 —— */
+  if (!e.phase2 && e.hp < e.maxHp * .5) {
+    e.phase2 = true;
+    burst(e.x, e.y, def.col, 26, 300, .8);
+    burst(e.x, e.y, '#ffffff', 10, 190, .5);
+    addFloater(e.x, e.y - 26, def.name + ' · 变态', def.col);
+    shake = Math.max(shake, 6);
+    sfx(280, .22, 'sawtooth', .35, 2.4);
+    e.speed *= 1.25;
+    e.cd = Math.min(e.cd, .5);
+  }
+  const fast = e.phase2;
   e.cd -= dt;
   switch (def.key) {
-    case 'crystal': {                      /* 三向晶片弹 */
+    case 'crystal': {                      /* 晶片弹：3 发 → 5 发 */
       if (e.cd <= 0) {
-        e.cd = 2.0;
+        const n = fast ? 5 : 3, spread = fast ? .22 : .30;
         const base = Math.atan2(P.y - e.y, P.x - e.x);
-        for (let i = -1; i <= 1; i++) {
-          const a = base + i * .30;
-          addEBullet(e.x, e.y, Math.cos(a) * 130, Math.sin(a) * 130, e.dmg * .55,
-            { col: '#9ff7ff', r: 5 });
+        for (let i = 0; i < n; i++) {
+          const a = base + (i - (n - 1) / 2) * spread;
+          addEBullet(e.x, e.y, Math.cos(a) * (fast ? 155 : 130), Math.sin(a) * (fast ? 155 : 130),
+            e.dmg * .55, { col: fast ? '#d8ffff' : '#9ff7ff', r: 5 });
         }
+        e.cd = fast ? 1.4 : 2.0;
       }
       break;
     }
-    case 'laser': {                        /* 短激光 */
+    case 'laser': {                        /* 短激光：1 束 → 2 束交叉 */
       if (e.cd <= 0) {
-        e.cd = 3.4;
-        spawnBeam(e, Math.atan2(P.y - e.y, P.x - e.x),
-          { charge: .5, dur: .32, w: 8, dmg: 9, col: '#c48bff' });
+        const base = Math.atan2(P.y - e.y, P.x - e.x);
+        spawnBeam(e, base, { charge: .5, dur: .32, w: 8, dmg: 9, col: '#c48bff' });
+        if (fast) spawnBeam(e, base + Math.PI / 2, { charge: .5, dur: .32, w: 7, dmg: 8, col: '#e0c4ff' });
+        e.cd = fast ? 2.4 : 3.4;
       }
       break;
     }
-    case 'meteor': {                       /* 小陨石 */
+    case 'meteor': {                       /* 小陨石：1 颗 → 2 颗 */
       if (e.cd <= 0) {
-        e.cd = 3.0;
         spawnMeteor(8, 0, 28);
+        if (fast) spawnMeteor(8, .22, 28);
+        e.cd = fast ? 2.2 : 3.0;
       }
       break;
     }
-    case 'blade': {                        /* 短冲刺 */
+    case 'blade': {                        /* 短冲刺：更快更远 */
       if (e.dashT > 0) {
         e.dashT -= dt;
         e.x = clamp(e.x + e.dashVx * dt, e.r, WORLD_W - e.r);
@@ -1098,36 +1113,39 @@ function updateStageElite(e, dt) {
         if (dist2(e.x, e.y, P.x, P.y) < (e.r + P.r) * (e.r + P.r) && P.invuln <= 0) {
           damagePlayer(e.dmg);
         }
-        if (e.dashT <= 0) e.cd = 2.4;
+        if (e.dashT <= 0) e.cd = fast ? 1.8 : 2.4;
         return;
       }
       if (e.cd <= 0) {
         const a = Math.atan2(P.y - e.y, P.x - e.x);
-        e.dashVx = Math.cos(a) * 430;
-        e.dashVy = Math.sin(a) * 430;
-        e.dashT = .22;
+        const sp = fast ? 560 : 430;
+        e.dashVx = Math.cos(a) * sp;
+        e.dashVy = Math.sin(a) * sp;
+        e.dashT = fast ? .28 : .22;
         burst(e.x, e.y, '#ff5f6d', 6, 140, .35);
       }
       break;
     }
-    case 'hive': {                         /* 定期孵化小怪 */
+    case 'hive': {                         /* 孵育：1 只 → 2 只 */
       if (e.cd <= 0) {
-        e.cd = 6.0;
         spawnEnemy(0, 0);
+        if (fast) spawnEnemy(0, 0);
+        e.cd = fast ? 4.5 : 6.0;
         burst(e.x, e.y, '#5cf08a', 8, 140, .4);
         sfx(300, .08, 'square', .12, 1.2);
       }
       break;
     }
-    case 'void': {                         /* 短距瞬移 + 十字弹 */
+    case 'void': {                         /* 瞬移 + 十字弹 → 六向弹 */
       if (e.cd <= 0) {
-        e.cd = 3.6;
+        e.cd = fast ? 2.8 : 3.6;
         burst(e.x, e.y, '#8a5cff', 10, 180, .4);
         e.x = clamp(P.x + rnd(-170, 170), 40, WORLD_W - 40);
         e.y = clamp(P.y + rnd(-170, 170), 40, WORLD_H - 40);
         burst(e.x, e.y, '#8a5cff', 10, 180, .4);
-        for (let i = 0; i < 4; i++) {
-          const a = TAU * i / 4 + rnd(0, .3);
+        const n = fast ? 6 : 4;
+        for (let i = 0; i < n; i++) {
+          const a = TAU * i / n + rnd(0, .3);
           addEBullet(e.x, e.y, Math.cos(a) * 120, Math.sin(a) * 120, e.dmg * .45,
             { col: '#c4a6ff' });
         }
@@ -1907,24 +1925,296 @@ function drawBossBody(e) {
   }
 }
 
-/* 阶段精英：直接复用同阶段 BOSS 的外形函数，按小尺寸重绘 + 一圈精英光环 */
+/* ===== 阶段精英：专属幼体形态，血量过半后"变态"成第二形态 ===== */
+
+/* 1 晶簇幼体：矿物小蟹 → 炸开的晶刺球 */
+function drawCrystalLarva(e, col, r) {
+  if (!e.phase2) {
+    ctx.beginPath();
+    ctx.moveTo(0, r * 1.05);
+    ctx.lineTo(-r * .95, -r * .35);
+    ctx.lineTo(r * .95, -r * .35);
+    ctx.closePath();
+    ctx.fillStyle = '#08222b'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(150,250,255,.9)';
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * r * .5 - r * .12, -r * .3);
+      ctx.lineTo(i * r * .5, -r * .92);
+      ctx.lineTo(i * r * .5 + r * .12, -r * .3);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(120,235,255,.75)'; ctx.lineWidth = 2;
+    for (const s of [-1, 1]) for (let k = 0; k < 2; k++) {
+      const yy = r * (.12 + k * .40);
+      ctx.beginPath();
+      ctx.moveTo(s * r * .68, yy);
+      ctx.lineTo(s * r * (1.22 + k * .08), yy + r * .36);
+      ctx.stroke();
+    }
+    drawGlow(0, r * .12, r * .5, col, .7);
+    ctx.fillStyle = '#eafeff';
+    circlePath(0, r * .12, r * .16); ctx.fill();
+  } else {
+    ctx.save();
+    ctx.rotate(G.t * .7);
+    for (let i = 0; i < 6; i++) {
+      ctx.save();
+      ctx.rotate(TAU * i / 6);
+      ctx.beginPath();
+      ctx.moveTo(r * .30, 0);
+      ctx.lineTo(r * 1.32, -r * .17);
+      ctx.lineTo(r * 1.52, 0);
+      ctx.lineTo(r * 1.32, r * .17);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(150,250,255,.85)'; ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+    drawGlow(0, 0, r * .8, col, .85);
+    ctx.fillStyle = '#eafeff';
+    polyPath(0, 0, r * .32, 6, G.t * 2); ctx.fill();
+  }
+}
+
+/* 2 棱光浮游：水母伞盖 → 四瓣张开的棱镜 */
+function drawPrismDrifter(e, col, r) {
+  const bob = Math.sin(G.t * 2.5) * r * .10;
+  if (!e.phase2) {
+    ctx.beginPath();
+    ctx.arc(0, bob, r * .85, Math.PI, 0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(200,150,255,.22)'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(196,139,255,.7)'; ctx.lineWidth = 2;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * r * .45, bob + r * .08);
+      ctx.quadraticCurveTo(i * r * .55 + Math.sin(G.t * 4 + i) * r * .18, bob + r * .85,
+                           i * r * .3, bob + r * 1.42);
+      ctx.stroke();
+    }
+    drawGlow(0, bob + r * .04, r * .5, col, .7);
+    ctx.fillStyle = '#f4eaff';
+    circlePath(0, bob + r * .04, r * .24); ctx.fill();
+    ctx.fillStyle = '#2a1040';
+    circlePath(0, bob + r * .04, r * .11); ctx.fill();
+  } else {
+    ctx.save();
+    ctx.rotate(G.t * .9);
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate(TAU * i / 4);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(r * .5, -r * 1.1, r * 1.25, -r * .34);
+      ctx.quadraticCurveTo(r * .6, -r * .10, 0, 0);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(196,139,255,.35)'; ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+    drawGlow(0, 0, r * .85, col, .8);
+    ctx.fillStyle = '#fff';
+    circlePath(0, 0, r * .19); ctx.fill();
+  }
+}
+
+/* 3 熔渣爬行者：贴地爬虫 → 站立的熔岩兽 */
+function drawMagmaCrawler(e, col, r) {
+  if (!e.phase2) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.05, r * .55, 0, 0, TAU);
+    ctx.fillStyle = '#2a1006'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    for (let i = -1; i <= 1; i++) drawGlow(i * r * .5, -r * .12, r * .28, '#ffb454', .8);
+    ctx.strokeStyle = '#ff9f6a'; ctx.lineWidth = 2;
+    for (const s of [-1, 1]) for (const k of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(k * r * .55, s * r * .3);
+      ctx.lineTo(k * r * .8, s * r * .8);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#ffb454';
+    circlePath(r * .95, 0, r * .15); ctx.fill();
+  } else {
+    ctx.fillStyle = '#3a1408';
+    polyPath(0, 0, r * .92, 6, 0); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+    polyPath(0, 0, r * .92, 6, 0); ctx.stroke();
+    ctx.strokeStyle = '#ff9f6a'; ctx.lineWidth = 2;
+    for (const s of [-1, 1]) for (let k = 0; k < 2; k++) {
+      ctx.beginPath();
+      ctx.moveTo(s * r * .55, (k ? -1 : 1) * r * .28);
+      ctx.lineTo(s * r * 1.15, (k ? -1 : 1) * r * .85);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = -Math.PI / 2 + (i - 1.5) * .52;
+      ctx.strokeStyle = '#ffd7a8'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r * .6, Math.sin(a) * r * .6);
+      ctx.lineTo(Math.cos(a) * r * 1.35, Math.sin(a) * r * 1.35);
+      ctx.stroke();
+    }
+    drawGlow(0, 0, r * .7, '#ffb454', .9);
+    ctx.fillStyle = '#fff3c4';
+    circlePath(0, 0, r * .17); ctx.fill();
+  }
+}
+
+/* 4 裂空掠袭者：振翅飞虫 → 合翼刀锋 */
+function drawRiftRaider(e, col, r) {
+  const flap = Math.sin(G.t * 18) * .5;
+  if (!e.phase2) {
+    ctx.save();
+    ctx.rotate(e.dashT > 0 ? Math.atan2(e.dashVy, e.dashVx) : Math.sin(G.t * 2) * .22);
+    ctx.beginPath();
+    ctx.moveTo(r * 1.15, 0);
+    ctx.lineTo(-r * .55, -r * .22);
+    ctx.lineTo(-r * .9, 0);
+    ctx.lineTo(-r * .55, r * .22);
+    ctx.closePath();
+    ctx.fillStyle = '#1c070c'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,120,140,.75)'; ctx.lineWidth = 2;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(0, s * r * .18);
+      ctx.quadraticCurveTo(-r * .4, s * r * (1.05 + flap * .55), -r * .98, s * r * .58);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#ffd0d6'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-r * .9, 0); ctx.lineTo(-r * 1.35, 0); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.rotate(e.dashT > 0 ? Math.atan2(e.dashVy, e.dashVx) : 0);
+    ctx.beginPath();
+    ctx.moveTo(r * 1.5, 0);
+    ctx.lineTo(r * .1, -r * .75);
+    ctx.lineTo(-r * .95, -r * .35);
+    ctx.lineTo(-r * .6, 0);
+    ctx.lineTo(-r * .95, r * .35);
+    ctx.lineTo(r * .1, r * .75);
+    ctx.closePath();
+    ctx.fillStyle = '#2a0a10'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.strokeStyle = '#ffd0d6'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(-r * .5, 0); ctx.lineTo(r * 1.3, 0); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* 5 虫巢孵育体：背卵甲虫 → 卵囊爆开的触须团 */
+function drawBroodCarrier(e, col, r) {
+  if (!e.phase2) {
+    ctx.beginPath();
+    ctx.ellipse(0, r * .15, r * .9, r * .72, 0, 0, TAU);
+    ctx.fillStyle = '#0c2a18'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -r * .5, r * .42, 0, TAU);
+    ctx.fillStyle = 'rgba(92,240,138,.22)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(92,240,138,.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const a = G.t * 1.2 + TAU * i / 3;
+      ctx.fillStyle = '#b8ffcf';
+      circlePath(Math.cos(a) * r * .16, -r * .5 + Math.sin(a) * r * .16, r * .07); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(92,240,138,.7)'; ctx.lineWidth = 2;
+    for (const s of [-1, 1]) for (let k = 0; k < 3; k++) {
+      const yy = r * (.08 + k * .26);
+      ctx.beginPath();
+      ctx.moveTo(s * r * .8, yy);
+      ctx.lineTo(s * r * 1.25, yy + r * .2);
+      ctx.stroke();
+    }
+  } else {
+    ctx.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const a = TAU * i / 20;
+      const rr = r * (.75 + .12 * Math.sin(a * 4 + G.t * 5));
+      const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#123a22'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(92,240,138,.8)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const a = G.t * 1.5 + TAU * i / 8;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r * .8, Math.sin(a) * r * .8);
+      ctx.lineTo(Math.cos(a) * r * 1.5, Math.sin(a) * r * 1.5);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 3; i++) {
+      const a = -G.t * 1.8 + TAU * i / 3;
+      drawGlow(Math.cos(a) * r * .45, Math.sin(a) * r * .45, r * .22, '#b8ffcf', .8);
+    }
+  }
+}
+
+/* 6 虚空残影：幽魂水滴 → 小型黑洞 */
+function drawVoidShade(e, col, r) {
+  if (!e.phase2) {
+    const wob = Math.sin(G.t * 3) * r * .12;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * .95);
+    ctx.quadraticCurveTo(r * .8, -r * .1, r * .34, r * .5);
+    ctx.quadraticCurveTo(0, r * .2 + wob, -r * .34, r * .5);
+    ctx.quadraticCurveTo(-r * .8, -r * .1, 0, -r * .95);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(80,40,150,.55)'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#e9d7ff';
+    circlePath(-r * .2, -r * .35, r * .085); ctx.fill();
+    circlePath(r * .2, -r * .35, r * .085); ctx.fill();
+    ctx.strokeStyle = 'rgba(196,166,255,.5)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, r * .5);
+    ctx.quadraticCurveTo(wob, r * 1.05, 0, r * 1.5);
+    ctx.stroke();
+  } else {
+    ctx.save();
+    ctx.rotate(G.t * 1.2);
+    ctx.scale(1, .5);
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.globalAlpha = .8;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.25, 0, TAU); ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#04020a';
+    circlePath(0, 0, r * .78); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    circlePath(0, 0, r * .78); ctx.stroke();
+    for (let i = 0; i < 5; i++) {
+      const a = G.t * 2.4 + TAU * i / 5;
+      ctx.fillStyle = '#c4a6ff';
+      circlePath(Math.cos(a) * r * 1.25, Math.sin(a) * r * 1.25 * .5, r * .06); ctx.fill();
+    }
+  }
+}
+
 function drawStageElite(e) {
   const def = STAGE_ELITES[e.sei];
   const col = e.hitFlash > .78 ? '#ffffff' : def.col;
   const r = e.r;
-  const rot = G.t * .8;
   switch (def.key) {
-    case 'crystal': drawCrystalCore(e, col, r, rot); break;
-    case 'laser':   drawPrismEye(e, col, r, rot); break;
-    case 'meteor':  drawMagmaTitan(e, col, r, rot); break;
-    case 'blade':   drawRiftBlade(e, col, r, rot); break;
-    case 'hive':    drawHive(e, col, r, rot); break;
-    case 'void':    drawVoidLord(e, col, r, rot); break;
+    case 'crystal': drawCrystalLarva(e, col, r); break;
+    case 'laser':   drawPrismDrifter(e, col, r); break;
+    case 'meteor':  drawMagmaCrawler(e, col, r); break;
+    case 'blade':   drawRiftRaider(e, col, r); break;
+    case 'hive':    drawBroodCarrier(e, col, r); break;
+    case 'void':    drawVoidShade(e, col, r); break;
   }
-  ctx.globalAlpha = .30 + .18 * Math.abs(Math.sin(G.t * 4));
+  /* 精英光环：变态后更亮更大 */
+  ctx.globalAlpha = (e.phase2 ? .50 : .28) + .16 * Math.abs(Math.sin(G.t * (e.phase2 ? 7 : 4)));
   ctx.strokeStyle = col;
-  ctx.lineWidth = 1.5;
-  circlePath(0, 0, r * 1.9); ctx.stroke();
+  ctx.lineWidth = e.phase2 ? 2.2 : 1.5;
+  circlePath(0, 0, r * (e.phase2 ? 2.15 : 1.9));
+  ctx.stroke();
   ctx.globalAlpha = 1;
 }
 
@@ -2197,6 +2487,7 @@ function drawMeteors() {
 }
 
 function render() {
+  if (G.eliteGallery) { renderEliteGallery(); return; }
   if (G.gallery) { renderGallery(); return; }
   drawBackground();
   worldTransform();
@@ -2779,7 +3070,8 @@ function boot() {
   }
   if (params.has('gallery')) {
     hintEl.style.display = 'none';
-    runGallery();
+    if (params.get('gallery') === '2') runEliteGallery();
+    else runGallery();
     return;
   }
   if (params.has('shot')) {
@@ -2800,6 +3092,10 @@ function boot() {
       const f = clamp(+params.get('bosshp'), .01, 1);
       const bb = enemies.find(e => e.isBoss);
       if (bb) bb.hp = bb.maxHp * f;
+    }
+    if (params.has('elite2')) {          /* 调试：直接看精英的第二形态 */
+      const el = enemies.find(en => en.sei >= 0);
+      if (el) { el.hp = el.maxHp * .3; el.phase2 = true; }
     }
     /* 先跑一段，让画面里有敌人和弹幕 */
     for (let i = 0; i < 240; i++) update(1 / 60);
@@ -3229,6 +3525,14 @@ function runEliteTest() {
     ok('#' + st + ' 机制 ' + MECH[st], flags[st],
        [sawBullet, sawBeam, sawMeteor, sawDash, sawSpawn, maxJump > 60].map(v => v ? 1 : 0).join(''));
 
+    /* 变态：血量降到 50% 以下应切换形态并加速 */
+    const spd0 = el.speed, form0 = el.phase2;
+    el.maxHp = 1000; el.hp = 400;
+    update(1 / 60);
+    ok('#' + st + ' 半血变态', el.phase2 === true && !form0 &&
+       Math.abs(el.speed - spd0 * 1.25) < .01,
+       '速度 ' + spd0.toFixed(0) + '→' + el.speed.toFixed(0));
+
     /* 撞到玩家：精英不会被同归于尽 */
     el.hp = 1e9;
     P.x = clamp(el.x, P.r, WORLD_W - P.r);
@@ -3278,6 +3582,66 @@ function runStageCheck() {
   el.hidden = false;
   el.textContent = '=== STAGE CHECK ===\n' + out.join('\n');
   document.title = '[STAGECHECK] ' + out.length + ' waves';
+}
+
+/* 精英图鉴：一只两种形态（幼体 / 变态） */
+function runEliteGallery() {
+  G.gallery = true; G.eliteGallery = true;
+  G.started = true; G.paused = true;
+  enemies = [];
+  for (let form = 0; form < 2; form++) {
+    for (let k = 0; k < 6; k++) {
+      enemies.push({
+        uid: uidSeq++, x: WORLD_W * (k + .5) / 6, y: form === 0 ? 155 : 400,
+        type: 4, level: 1, counts: 0, hp: 1000, maxHp: 1000, speed: 0,
+        r: STAGE_ELITES[k].r * 1.45,
+        dmg: 0, gold: 0, xp: 0, phase: 0, spawnAnim: 0, hitFlash: 0,
+        isBoss: false, isFinal: false, bkind: 0, stage: 0, sei: k, phase2: form === 1,
+        cd: 1e9, cd2: 1e9, castT: 0, spin: 0, chargeT: 0, dashT: 0,
+        dashVx: 0, dashVy: 0, orbit: 0, bossName: '', dead: false,
+      });
+    }
+  }
+  startLoop();
+}
+
+function renderEliteGallery() {
+  drawBackground();
+  worldTransform();
+  drawStars();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, WORLD_W, WORLD_H);
+  ctx.clip();
+  for (const e of enemies) drawEnemy(e);
+  ctx.restore();
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const gx = ox, gy = oy, gw = WORLD_W * scale;
+  const sx = wx => gx + wx * scale, sy = wy => gy + wy * scale;
+  const put = (cx, cy, main, sub, col, fs) => {
+    ctx.font = '700 ' + fs + 'px "Segoe UI","Microsoft YaHei",system-ui,sans-serif';
+    ctx.fillStyle = col;
+    ctx.fillText(main, cx, cy);
+    ctx.font = '600 11.5px "Segoe UI",system-ui,sans-serif';
+    ctx.fillStyle = '#7f9cc0';
+    ctx.fillText(sub, cx, cy + 17);
+  };
+  ctx.font = '700 13.5px "Segoe UI",system-ui,sans-serif';
+  ctx.fillStyle = '#4f6a94';
+  ctx.fillText('形态一 · 幼体  （血量 100% ~ 50%）', gx + gw * .5, sy(78));
+  ctx.fillText('形态二 · 变态  （血量 < 50%，更快 + 双倍技能）', gx + gw * .5, sy(330));
+  for (let form = 0; form < 2; form++) {
+    for (let k = 0; k < 6; k++) {
+      const e = enemies[form * 6 + k], def = STAGE_ELITES[k];
+      put(sx(e.x), sy(e.y) + e.r * scale + 22,
+          def.name, '[' + def.tag + ']  ' + (k * 5 + 1) + '–' + (k * 5 + 4) + ' 关',
+          def.col, 14);
+    }
+  }
+  ctx.textBaseline = 'alphabetic';
 }
 
 /* 全局错误也写进 DOM，方便无头检查 */
