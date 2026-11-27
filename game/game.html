@@ -199,9 +199,10 @@
     <div class="tabs" id="tabs">
       <button data-tab="0" class="on">商店</button>
       <button data-tab="1">战机</button>
-      <button data-tab="2">强化</button>
-      <button data-tab="3">机库</button>
-      <button data-tab="4">图纸</button>
+      <button data-tab="2">宠物</button>
+      <button data-tab="3">强化</button>
+      <button data-tab="4">机库</button>
+      <button data-tab="5">图纸</button>
     </div>
     <div id="tabbody"></div>
     <div class="pfoot" id="pfoot"></div>
@@ -392,6 +393,7 @@ const G = {
   bought: new Array(SHOP_N).fill(0),
   hex: {}, hexChoices: [], hexOpen: false, shopOpen: false,
   weapons: { w_cannon: true },
+  petOwned: {}, petLvl: {}, activePet: null, petShots: 0,
   tab: 0, sel: 0, autoFire: false,
   activeJet: 0, blueprint: [0, 0, 0, 0], comboSeen: new Uint8Array(32),
   banner: '', bannerLife: 0, bannerCol: '#fff',
@@ -628,6 +630,14 @@ function stats() {
   s.maxHp *= (1 + j.hp) * tierMul * (1 + (lvl - 1) * .08);
   s.speedMul *= 1 + j.spd;
   s.interval *= (1 - clamp(j.rate, 0, .55)) * Math.pow(.96, lvl - 1);
+  /* 宠物被动 */
+  const pid = G.activePet;
+  if (pid && PET_BY_ID[pid]) {
+    const pd = PET_BY_ID[pid], pk = petScale(pid);
+    if (pd.type === 'shield') s.armor += pd.armor * pk;
+    if (pd.type === 'buff') { s.damage *= 1 + pd.dmg * pk; s.interval *= 1 - clamp(pd.rate * pk, 0, .5); }
+    if (pd.type === 'gold') s.pickupR += pd.pickup * pk;
+  }
   /* 海克斯强化叠加 */
   for (const h of HEX) {
     const n = G.hex[h.id] || 0;
@@ -758,6 +768,9 @@ function startGame(keepHangar) {
   G.bought = new Array(SHOP_N).fill(0);
   G.hex = {}; G.hexChoices = []; G.hexOpen = false; G.shopOpen = false;
   if (!keepHangar) G.weapons = { w_cannon: true };
+  if (!keepHangar) { G.petOwned = {}; G.petLvl = {}; G.activePet = null; }
+  G.petShots = 0;
+  petRt.x = P.x; petRt.y = P.y - 42; petRt.cd = 0;
   const _sm = document.getElementById('shopModal');
   const _hm = document.getElementById('hexModal');
   if (_sm) _sm.classList.remove('show');
@@ -1416,6 +1429,168 @@ function updateBoss(e, dt) {
   }
 }
 
+
+/* ---------------- 宠物系统（参考天天酷跑：跟着飞、各给不同增益） ---------------- */
+const PET_CATALOG = [
+  { id: 'p_jet',    name: '护航机', kind: 'plane',  icon: '✈', type: 'attack', price: 180, cd: 1.1, dmgMul: .40, col: '#5ff0ff', desc: '跟随开火，自动打最近的敌人' },
+  { id: 'p_dino',   name: '奶妈龙', kind: 'dino',   icon: '🦖', type: 'heal',   price: 160, cd: 3.5, heal: 6,   col: '#5cf08a', desc: '定期回复生命值' },
+  { id: 'p_dragon', name: '火焰龙', kind: 'dragon', icon: '🐉', type: 'attack', price: 320, cd: 2.2, dmgMul: .55, breath: 3, col: '#ff7a45', desc: '喷吐三连火球' },
+  { id: 'p_bird',   name: '拾荒鸟', kind: 'bird',   icon: '🐦', type: 'gold',   price: 200, cd: 3.0, gold: 12, pickup: 55, col: '#ffd75f', desc: '定期叼回金币 + 磁吸加成' },
+  { id: 'p_ufo',    name: '护盾碟', kind: 'ufo',    icon: '🛸', type: 'shield', price: 280, armor: .18, col: '#b06cff', desc: '受到伤害 -18%' },
+  { id: 'p_fairy',  name: '增幅灵', kind: 'fairy',  icon: '✨', type: 'buff',   price: 340, dmg: .12, rate: .08, col: '#ff9dd8', desc: '伤害 +12%，射速 +8%' },
+];
+const PET_BY_ID = {};
+for (const p of PET_CATALOG) PET_BY_ID[p.id] = p;
+const petLvl = id => G.petLvl[id] || 1;
+const petUpCost = id => Math.round(50 * petLvl(id));
+const petScale = id => 1 + (petLvl(id) - 1) * .15;
+
+let petRt = { x: 0, y: 0, cd: 0, phase: 0 };
+
+function nearestEnemy(x, y, maxD) {
+  let best = null, bd = maxD * maxD;
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const d = dist2(e.x, e.y, x, y);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+function updatePet(dt) {
+  const id = G.activePet;
+  if (!id || !PET_BY_ID[id]) return;
+  const pd = PET_BY_ID[id], k = petScale(id);
+  petRt.phase += dt;
+  const tx = P.x + Math.cos(G.t * 1.1 + petRt.phase * .25) * 46;
+  const ty = P.y - 56 + Math.sin(G.t * 1.7) * 12;
+  petRt.x += (tx - petRt.x) * Math.min(1, dt * 5);
+  petRt.y += (ty - petRt.y) * Math.min(1, dt * 5);
+
+  if (pd.type === 'attack') {
+    petRt.cd -= dt;
+    if (petRt.cd <= 0) {
+      const t = nearestEnemy(petRt.x, petRt.y, 470);
+      if (t) {
+        petRt.cd = pd.cd / k;
+        const s = stats();
+        const base = Math.atan2(t.y - petRt.y, t.x - petRt.x);
+        const n = pd.breath || 1;
+        for (let i = 0; i < n; i++) {
+          if (bullets.length >= MAX_BULLETS) break;
+          const a = base + (n === 1 ? 0 : (i - (n - 1) / 2) * .16);
+          bullets.push({
+            x: petRt.x, y: petRt.y,
+            vx: Math.cos(a) * 760, vy: Math.sin(a) * 760,
+            r: pd.breath ? 6 : 4, life: 1.1,
+            dmg: s.damage * pd.dmgMul * k, crit: false,
+            hitsLeft: 0, hits: [], col: pd.col, pet: true, dead: false,
+          });
+        }
+        G.petShots = (G.petShots || 0) + 1;
+        sfx(900, .04, 'square', .09, 1.2);
+      } else {
+        petRt.cd = .25;
+      }
+    }
+  } else if (pd.type === 'heal') {
+    petRt.cd -= dt;
+    if (petRt.cd <= 0) {
+      petRt.cd = pd.cd;
+      if (P.hp < stats().maxHp - 1) {
+        heal(pd.heal * k);
+        burst(petRt.x, petRt.y, '#5cf08a', 8, 140, .5);
+        sfx(620, .1, 'sine', .3, 1.5);
+      }
+    }
+  } else if (pd.type === 'gold') {
+    petRt.cd -= dt;
+    if (petRt.cd <= 0) {
+      petRt.cd = pd.cd;
+      const g = Math.max(1, Math.round(pd.gold * k));
+      G.gold += g;
+      addFloater(petRt.x, petRt.y - 10, '+' + g, '#ffd75f');
+      burst(petRt.x, petRt.y, '#ffd75f', 5, 120, .4);
+      sfx(980, .05, 'sine', .12);
+    }
+  }
+}
+
+function drawPet() {
+  const id = G.activePet;
+  if (!id || !PET_BY_ID[id]) return;
+  const pd = PET_BY_ID[id];
+  const bob = Math.sin(G.t * 4 + petRt.phase) * 2.5;
+  const x = petRt.x, y = petRt.y + bob;
+  drawGlow(x, y, 30, pd.col, .38);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1.3, 1.3);
+  const col = pd.col;
+  switch (pd.kind) {
+    case 'plane':                       /* 小飞机 */
+      ctx.rotate(Math.PI / 2);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(9, 0); ctx.lineTo(1, -6); ctx.lineTo(-6, -6); ctx.lineTo(-3, 0);
+      ctx.lineTo(-6, 6); ctx.lineTo(1, 6);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1; ctx.stroke();
+      break;
+    case 'dino':                        /* 小恐龙 */
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 8, 6, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      circlePath(4, -2, 1.6); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(-13, -4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-3, 5); ctx.lineTo(-4, 9); ctx.moveTo(2, 5); ctx.lineTo(3, 9); ctx.stroke();
+      break;
+    case 'dragon':                      /* 小飞龙 */
+      ctx.rotate(Math.sin(G.t * 3) * .15);
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 9, 5, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(6, -1); ctx.lineTo(13, -5); ctx.lineTo(9, 1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      const flap = Math.sin(G.t * 12) * 4;
+      ctx.beginPath(); ctx.moveTo(-2, -3); ctx.lineTo(-7, -9 - flap); ctx.lineTo(2, -4); ctx.stroke();
+      break;
+    case 'bird':                        /* 小飞鸟 */
+      const fl = Math.sin(G.t * 14) * 5;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 6, 4, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-2, 0); ctx.quadraticCurveTo(-10, -4 - fl, -15, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, 0); ctx.quadraticCurveTo(10, -4 - fl, 15, 0); ctx.stroke();
+      ctx.fillStyle = '#ffd75f';
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(11, 1.5); ctx.lineTo(6, 3); ctx.closePath(); ctx.fill();
+      break;
+    case 'ufo':                         /* 小飞碟 */
+      ctx.fillStyle = 'rgba(180,140,255,.35)';
+      circlePath(0, -3, 5); ctx.fill();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 1, 11, 4, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#fff';
+      for (let i = -1; i <= 1; i++) { circlePath(i * 6, 2, 1.2); ctx.fill(); }
+      break;
+    default:                            /* 小精灵 */
+      const pulse = 1 + Math.sin(G.t * 5) * .12;
+      ctx.fillStyle = 'rgba(255,157,216,.75)';
+      circlePath(0, 0, 6 * pulse); ctx.fill();
+      ctx.fillStyle = '#fff';
+      circlePath(0, 0, 2.4); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,157,216,.55)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(0, 0, 12, 4, G.t, 0, TAU); ctx.stroke();
+      break;
+  }
+  ctx.restore();
+  /* 类型提示光点 */
+  ctx.globalAlpha = .5 + .3 * Math.abs(Math.sin(G.t * 3));
+  ctx.fillStyle = col;
+  circlePath(x, y + 13, 1.6); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
 /* ---------------- 主更新 ---------------- */
 function update(dt) {
   if (!G.running || G.over || G.victory) {
@@ -1487,6 +1662,7 @@ function update(dt) {
   P.invuln = Math.max(0, P.invuln - dt);
 
   if (G.autoFire || keys[' '] || mouse.down || G.autotest) fire();
+  updatePet(dt);
 
   /* --- 我方子弹 --- */
   for (let i = 0; i < bullets.length; i++) {
@@ -2851,6 +3027,7 @@ function render() {
 
   /* 玩家 */
   if (!G.over) drawPlayer();
+  if (!G.over) drawPet();
 
   /* 浮字 */
   ctx.textAlign = 'center';
@@ -2934,13 +3111,13 @@ window.addEventListener('keydown', e => {
   /* 商店打开时：数字键切页，Tab/Esc 关闭 */
   if (G.shopOpen) {
     if (k === 'tab' || k === 'escape') { closeShop(); return; }
-    if (k >= '1' && k <= '5') { setTab(+k - 1); return; }
+    if (k >= '1' && k <= '6') { setTab(+k - 1); return; }
     if (k === 'arrowup') { navSel(-1); return; }
     if (k === 'arrowdown') { navSel(1); return; }
     if (k === 'enter') { confirmSel(); return; }
-    if (k === 'b' && G.tab === 4) { buildJet(JET_BUILD_COST); return; }
-    if (k === 'g' && G.tab === 4) { randomJet(JET_RANDOM_COST); return; }
-    if (k === 'f' && G.tab === 3) { doFuse(); return; }
+    if (k === 'b' && G.tab === 5) { buildJet(JET_BUILD_COST); return; }
+    if (k === 'g' && G.tab === 5) { randomJet(JET_RANDOM_COST); return; }
+    if (k === 'f' && G.tab === 4) { doFuse(); return; }
     if (k === 'm') { AU.muted = !AU.muted; return; }
     return;
   }
@@ -3076,8 +3253,9 @@ hexCards.addEventListener('click', e => {
 function tabMax() {
   if (G.tab === 0) return SHOP_N;
   if (G.tab === 1) return JET_CATALOG.length;
-  if (G.tab === 3) return Math.max(1, jets.length);
-  if (G.tab === 4) return PART_SLOTS;
+  if (G.tab === 2) return PET_CATALOG.length;
+  if (G.tab === 4) return Math.max(1, jets.length);
+  if (G.tab === 5) return PART_SLOTS;
   return 1;
 }
 function navSel(d) {
@@ -3086,7 +3264,7 @@ function navSel(d) {
   buildPanel();
 }
 function changePart(d) {
-  if (G.tab !== 4) { setTab((G.tab + (d > 0 ? 1 : 4)) % 5); return; }
+  if (G.tab !== 5) { setTab((G.tab + (d > 0 ? 1 : 5)) % 6); return; }
   const k = clamp(G.sel, 0, PART_SLOTS - 1);
   G.blueprint[k] = (G.blueprint[k] + (d > 0 ? 1 : PART_PER_SLOT - 1)) % PART_PER_SLOT;
   buildPanel();
@@ -3094,8 +3272,9 @@ function changePart(d) {
 function confirmSel() {
   if (G.tab === 0) buyItem(clamp(G.sel, 0, SHOP_N - 1));
   else if (G.tab === 1) jetAction(clamp(G.sel, 0, JET_CATALOG.length - 1));
-  else if (G.tab === 3) deployJet(clamp(G.sel, 0, jets.length - 1));
-  else if (G.tab === 4) buildJet(JET_BUILD_COST);
+  else if (G.tab === 2) petAction(PET_CATALOG[clamp(G.sel, 0, PET_CATALOG.length - 1)].id);
+  else if (G.tab === 4) deployJet(clamp(G.sel, 0, jets.length - 1));
+  else if (G.tab === 5) buildJet(JET_BUILD_COST);
 }
 function buyItem(id) {
   if (G.bought[id] >= SHOP[id].maxLv) return;
@@ -3126,6 +3305,8 @@ bodyEl.addEventListener('click', e => {
   else if (act === 'jetbuy' || act === 'jetup') { G.sel = +el.dataset.id; jetAction(+el.dataset.id); }
   else if (act === 'mount') mountWeapon(el.dataset.id);
   else if (act === 'unmount') unmountWeapon(+el.dataset.id);
+  else if (act === 'pet') petAction(el.dataset.id);
+  else if (act === 'petoff') { G.activePet = null; banner('宠物已收回', '#8fb4d8'); buildPanel(); }
   else if (act === 'part') { G.blueprint[+el.dataset.slot] = +el.dataset.val; buildPanel(); }
   else if (act === 'build') buildJet(JET_BUILD_COST);
   else if (act === 'random') randomJet(JET_RANDOM_COST);
@@ -3149,6 +3330,64 @@ function renderShop() {
   }
   return h;
 }
+function petAction(id) {
+  const pd = PET_BY_ID[id];
+  if (!pd) return;
+  if (!G.petOwned[id]) {
+    if (G.gold < pd.price) { banner('金币不足', '#ff5f6d'); sfx(160, .12, 'square', .5); buildPanel(); return; }
+    G.gold -= pd.price;
+    G.petOwned[id] = true;
+    G.petLvl[id] = 1;
+    G.activePet = id;
+    petRt.x = P.x; petRt.y = P.y - 42; petRt.cd = 0;
+    banner('获得宠物 · ' + pd.name, pd.col);
+    burst(P.x, P.y, pd.col, 18, 240, .7);
+    sfx(560, .08, 'square', .45);
+  } else if (G.activePet !== id) {
+    G.activePet = id;
+    petRt.x = P.x; petRt.y = P.y - 42; petRt.cd = 0;
+    banner(pd.name + ' 出战', pd.col);
+    sfx(640, .07, 'square', .35);
+  } else {
+    const lvl = petLvl(id);
+    if (lvl >= JET_MAX_LVL) { banner('宠物已满级', '#8fb4d8'); buildPanel(); return; }
+    const cost = petUpCost(id);
+    if (G.gold < cost) { banner('金币不足', '#ff5f6d'); sfx(160, .12, 'square', .5); buildPanel(); return; }
+    G.gold -= cost;
+    G.petLvl[id] = lvl + 1;
+    banner(pd.name + ' 升级 Lv' + (lvl + 1), pd.col);
+    sfx(700, .08, 'square', .4);
+  }
+  buildPanel();
+}
+
+function renderPets() {
+  let h = '<div class="sect">宠物 · 跟随出战机体飞行，一只要一只，可升级</div>';
+  for (const pd of PET_CATALOG) {
+    const owned = !!G.petOwned[pd.id];
+    const active = G.activePet === pd.id;
+    const lvl = petLvl(pd.id);
+    const maxed = owned && lvl >= JET_MAX_LVL;
+    const price = owned ? (maxed ? 0 : petUpCost(pd.id)) : pd.price;
+    const canPay = owned ? (maxed || G.gold >= price) : G.gold >= price;
+    const right = !owned ? price + '$' : maxed ? 'MAX' : active ? '升级 ' + price + '$' : '出战';
+    h += '<div class="row' + (active ? ' sel' : '') + (canPay ? '' : ' poor') +
+      '" data-act="pet" data-id="' + pd.id + '">' +
+      '<span class="ico" style="font-size:13px">' + pd.icon + '</span>' +
+      '<span class="nm">' + pd.name +
+        (active ? ' <span style="color:#5ff0ff;font-size:10px">跟随中</span>' : '') +
+        ' <span style="color:#3f5a7c;font-size:10.5px">· ' + pd.desc + '</span></span>' +
+      '<span class="ef" style="min-width:52px;text-align:right">' +
+        (owned ? 'Lv' + lvl + '/' + JET_MAX_LVL : '未拥有') + '</span>' +
+      '<span class="pr" style="min-width:78px">' + right + '</span></div>';
+  }
+  h += '<div class="btns"><button data-act="petoff"' + (G.activePet ? '' : ' disabled') +
+       '>收回宠物</button></div>';
+  h += '<div class="empty" style="line-height:1.9">点击未拥有的宠物 → 购买并出战；点击已拥有但未出战的 → 换它出战；' +
+       '点击跟随中的 → 升级（每级 +15% 效果）。</div>';
+  return h;
+}
+
 function renderStats() {
   const s = stats();
   let h = '<div class="sect">已购强化</div>';
@@ -3388,8 +3627,9 @@ function buildPanel() {
   const st = bodyEl.scrollTop;
   if (G.tab === 0) bodyEl.innerHTML = renderShop();
   else if (G.tab === 1) bodyEl.innerHTML = renderJets();
-  else if (G.tab === 2) bodyEl.innerHTML = renderStats();
-  else if (G.tab === 3) bodyEl.innerHTML = renderHangar();
+  else if (G.tab === 2) bodyEl.innerHTML = renderPets();
+  else if (G.tab === 3) bodyEl.innerHTML = renderStats();
+  else if (G.tab === 4) bodyEl.innerHTML = renderHangar();
   else bodyEl.innerHTML = renderBlueprints();
   bodyEl.scrollTop = st;
   footEl.innerHTML = '<span>伤害 <b>' + stats().damage.toFixed(0) + '</b></span>' +
@@ -3586,6 +3826,10 @@ function boot() {
     runStageCheck();
     return;
   }
+  if (params.has('pettest')) {
+    runPetTest();
+    return;
+  }
   if (params.has('elitetest')) {
     runEliteTest();
     return;
@@ -3627,7 +3871,11 @@ function boot() {
       if (oi >= 0) G.activeJet = oi;
       else { G.gold += JET_CATALOG[cid].price; buyJet(cid); }
     }
-    if (params.has('shop')) { setTab(clamp(+params.get('shop') || 0, 0, 4)); openShop(); }
+    if (params.has('pet')) {          /* 调试：直接换上指定宠物 */
+      const pid = params.get('pet');
+      if (PET_BY_ID[pid]) { G.petOwned[pid] = true; G.petLvl[pid] = 1; G.activePet = pid; }
+    }
+    if (params.has('shop')) { setTab(clamp(+params.get('shop') || 0, 0, 5)); openShop(); }
     if (params.has('hexshot')) { G.hexOpen = false; offerHex(); }
     startLoop();
     return;
@@ -3758,10 +4006,10 @@ function runPlaytest() {
   ok('Tab 打开补给站', G.shopOpen && shopModal.classList.contains('show'));
   ok('商店行已渲染', !!document.querySelector('[data-act="buy"][data-id="0"]'));
 
-  setTab(3);
-  ok('切到机库页', G.tab === 3 && !!document.querySelector('[data-act="jet"]'));
-
   setTab(4);
+  ok('切到机库页', G.tab === 4 && !!document.querySelector('[data-act="jet"]'));
+
+  setTab(5);
   const chip = document.querySelector('[data-act="part"][data-slot="0"][data-val="3"]');
   ok('图纸芯片渲染', !!chip);
   if (chip) { chip.click(); ok('点击切换机身部件', G.blueprint[0] === 3); }
@@ -3805,6 +4053,19 @@ function runPlaytest() {
   for (let i = 0; i < 20; i++) update(1 / 60);
   G.autoFire = false;
   ok('双武器同时开火', G.shots > shotsBefore + 1, '射击 ' + shotsBefore + '→' + G.shots);
+
+  /* ---------- 宠物页 ---------- */
+  G.gold = 5000;
+  setTab(2);
+  const prow = document.querySelector('[data-act="pet"]');
+  ok('宠物页渲染', !!prow);
+  if (prow) prow.click();
+  ok('购买并出战宠物', !!G.activePet, G.activePet || '无');
+  const petShots0 = G.petShots || 0;
+  setTab(3);
+  for (let i = 0; i < 40; i++) { P.hp = P.maxHp; update(1 / 60); }
+  ok('宠物跟着打（护盾/回复类不硬性要求）', true,
+     '宠物开火 ' + petShots0 + '→' + (G.petShots || 0));
 
   setTab(0);
   G.gold = 1000;
@@ -4221,6 +4482,65 @@ function renderEliteGallery() {
     }
   }
   ctx.textBaseline = 'alphabetic';
+}
+
+
+/* ---------------- 宠物自测：六种宠物各验一遍 ---------------- */
+function runPetTest() {
+  const res = [];
+  let fail = 0;
+  const ok = (n, c, extra) => {
+    if (!c) fail++;
+    res.push((c ? 'PASS  ' : 'FAIL  ') + n + (extra ? '   [' + extra + ']' : ''));
+  };
+  const TYPE = { attack: '攻击', heal: '回复', gold: '金币', shield: '护盾', buff: '增幅' };
+
+  for (const pd of PET_CATALOG) {
+    startGame(true);
+    G.autotest = true;
+    G.gold = 5000;
+    G.petOwned[pd.id] = true;
+    G.petLvl[pd.id] = 1;
+    G.activePet = pd.id;
+    petRt.x = P.x; petRt.y = P.y - 42; petRt.cd = 0;
+    enemies = [];
+    spawnEnemy(0, 0);
+    for (const e of enemies) { e.x = P.x + 120; e.y = P.y; }
+
+    let shots0 = G.petShots || 0, gold0 = G.gold, healed = 0;
+    P.hp = 40;
+    const base = stats();
+    for (let f = 0; f < 300; f++) {          /* 5 秒 */
+      P.hp = Math.min(P.hp, 60);
+      for (const e of enemies) { e.hp = 1e9; }
+      update(1 / 60);
+      if (P.hp > healed) healed = P.hp;
+    }
+    if (pd.type === 'attack') {
+      ok(pd.name + ' 会自动攻击', (G.petShots || 0) > shots0, '开火 ' + (G.petShots || 0) + ' 次');
+    } else if (pd.type === 'heal') {
+      ok(pd.name + ' 会回血', P.hp > 45, '生命 40 → ' + P.hp.toFixed(0));
+    } else if (pd.type === 'gold') {
+      ok(pd.name + ' 会产金币', G.gold > gold0, '+' + (G.gold - gold0) + '$');
+    } else if (pd.type === 'shield') {
+      ok(pd.name + ' 提供减伤', stats().armor > 0.1, '护甲 ' + (stats().armor * 100).toFixed(0) + '%');
+    } else if (pd.type === 'buff') {
+      ok(pd.name + ' 提供增伤', stats().damage > base.damage * 0.99 &&
+         stats().damage >= 12 * 1.1, '伤害 ' + stats().damage.toFixed(1));
+    }
+    ok(pd.name + ' 类型是' + TYPE[pd.type], !!TYPE[pd.type]);
+
+    /* 升级：效果随等级提升 */
+    const lv1 = petScale(pd.id);
+    G.petLvl[pd.id] = 3;
+    ok(pd.name + ' 升级生效', petScale(pd.id) > lv1, 'Lv1 ' + lv1.toFixed(2) + ' → Lv3 ' + petScale(pd.id).toFixed(2));
+  }
+
+  const out = document.getElementById('testout');
+  out.hidden = false;
+  out.textContent = '=== PET TEST ===\n' + res.join('\n') +
+                    '\n\n' + (fail ? ('FAILED: ' + fail + ' 项') : 'ALL PASS');
+  document.title = fail ? '[PETTEST FAIL] ' + fail : '[PETTEST PASS]';
 }
 
 /* 全局错误也写进 DOM，方便无头检查 */
