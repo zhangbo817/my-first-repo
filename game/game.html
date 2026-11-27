@@ -233,16 +233,32 @@
   body.touch #pauseBtn{width:46px;height:46px;padding:0;border-radius:14px;
     font-size:15px;letter-spacing:1px}
 
-  /* 竖屏提示 */
-  #rotateTip{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:70;
-    display:none;padding:6px 15px;border-radius:999px;font-size:11.5px;
-    color:#bfe9ff;background:rgba(9,18,31,.88);border:1px solid #24425f;
-    pointer-events:none;white-space:nowrap;letter-spacing:.5px;
-    animation:tipFade 10s ease-out forwards}
-  @keyframes tipFade{0%{opacity:0}6%,55%{opacity:1}100%{opacity:0;visibility:hidden}}
-  @media (orientation:portrait){
-    body.touch #rotateTip{display:block;top:auto;bottom:176px}
-  }
+  /* 竖屏遮罩：强制横屏 */
+  #rotateGate{position:fixed;inset:0;z-index:80;display:none;
+    flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:24px;
+    background:radial-gradient(circle at 50% 42%,rgba(10,22,40,.97),rgba(2,4,9,.99));
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  #rotateGate.show{display:flex;animation:fade .2s ease-out}
+  .rg-phone{width:44px;height:68px;border:2px solid #5ff0ff;border-radius:10px;
+    position:relative;margin-bottom:24px;
+    box-shadow:0 0 26px rgba(95,240,255,.45),0 0 0 1px rgba(95,240,255,.15) inset;
+    animation:rgRot 2.6s cubic-bezier(.5,0,.5,1) infinite}
+  .rg-phone span{position:absolute;left:50%;bottom:5px;width:14px;height:2px;
+    background:#5ff0ff;border-radius:2px;transform:translateX(-50%)}
+  @keyframes rgRot{0%,16%{transform:rotate(0deg)}52%,100%{transform:rotate(90deg)}}
+  .rg-t{font-size:20px;letter-spacing:5px;color:#eafcff;
+    text-shadow:0 0 26px rgba(95,240,255,.5)}
+  .rg-s{margin-top:10px;font-size:12px;line-height:1.8;color:#7fa8cc}
+  .rg-btn{margin-top:22px;padding:11px 26px;border-radius:10px;font-family:inherit;
+    font-size:13px;letter-spacing:1px;cursor:pointer;color:#04121a;font-weight:700;
+    border:1px solid #8ff6ff;
+    background:linear-gradient(180deg,#8ff6ff,#3fd7ee);
+    box-shadow:0 12px 30px rgba(95,240,255,.3)}
+  .rg-btn:active{transform:scale(.96)}
+  .rg-esc{margin-top:26px;font-size:11.5px;color:#4f6a94;letter-spacing:.5px;
+    padding:6px 12px;visibility:hidden;cursor:pointer}
+  #rotateGate.late .rg-esc{visibility:visible}
 
   /* --- 弹窗在手机上铺满、加大点击热区 --- */
   body.touch .modal{touch-action:pan-y}
@@ -299,7 +315,15 @@
     </div>
   </div>
 </div>
-<div id="rotateTip">建议横屏游玩 · 视野更开阔</div>
+
+<!-- 竖屏遮罩：强制横屏 -->
+<div id="rotateGate">
+  <div class="rg-phone"><span></span></div>
+  <div class="rg-t">请横屏游玩</div>
+  <div class="rg-s" id="rgSub">把手机横过来 —— 视野更大<br>摇杆和技能键也更好按</div>
+  <button class="rg-btn" id="rgLock">帮我转成横屏</button>
+  <div class="rg-esc" id="rgEsc">还是竖屏玩 &rsaquo;</div>
+</div>
 
 <!-- 商店 / 强化 / 机库 / 图纸 -->
 <div id="shopModal" class="modal">
@@ -2059,6 +2083,9 @@ function resize() {
       HUD_X = Math.max(16, Math.round(br.right + 8));
     }
   }
+
+  /* 手机竖屏：弹横屏遮罩 */
+  syncOrientationGate();
 }
 
 function circlePath(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
@@ -3317,6 +3344,32 @@ function bindHold(el, on, off) {
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
+/* ---- 竖屏遮罩：手机端强制横屏 ---- */
+let gateTimer = null;
+let gateSkipped = false;          /* 玩家主动选择「还是竖屏玩」 */
+
+function syncOrientationGate() {
+  const gate = document.getElementById('rotateGate');
+  if (!gate) return;
+  const show = TOUCH && !gateSkipped && VH > VW;    /* 竖屏 */
+  if (show) {
+    /* 转到竖屏就把游戏停下来，别让玩家在遮罩后面被打死 */
+    if (G.started && !G.paused && !G.over && !G.victory && !G.shopOpen && !G.hexOpen) {
+      togglePause();
+    }
+    if (!gateTimer) {
+      gateTimer = setTimeout(() => {
+        gate.classList.add('late');      /* 6 秒后放出「还是竖屏玩」兜底 */
+        gateTimer = null;
+      }, 6500);
+    }
+  } else {
+    if (gateTimer) { clearTimeout(gateTimer); gateTimer = null; }
+    gate.classList.remove('late');
+  }
+  gate.classList.toggle('show', show);
+}
+
 function initTouchUI() {
   if (!TOUCH) return;
   document.body.classList.add('touch');
@@ -3377,6 +3430,39 @@ function initTouchUI() {
   /* 画布空白处点一下也能从暂停恢复 */
   cv.addEventListener('pointerdown', () => {
     if (G.paused && G.started && !G.over && !G.victory) resume();
+  });
+
+  /* --- 横屏遮罩上的两个按钮 --- */
+  const gate = document.getElementById('rotateGate');
+  const rgLock = document.getElementById('rgLock');
+  const rgEsc = document.getElementById('rgEsc');
+  const rgSub = document.getElementById('rgSub');
+
+  if (rgEsc) rgEsc.addEventListener('click', () => {
+    gateSkipped = true;
+    syncOrientationGate();
+  });
+
+  if (rgLock) rgLock.addEventListener('click', async () => {
+    const canLock = !!(screen.orientation && screen.orientation.lock);
+    let ok = false;
+    if (canLock) {
+      try {
+        /* 多数浏览器要求先进全屏才能锁方向 */
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+        await screen.orientation.lock('landscape');
+        ok = true;
+      } catch (_) { ok = false; }
+    }
+    setTimeout(() => {
+      if (VH > VW && rgSub) {
+        rgSub.textContent = ok
+          ? '还是竖屏？系统可能锁了方向，请手动把手机横过来'
+          : '这台设备不支持自动旋转，请手动把手机横过来（顺便看看系统有没有开竖屏锁定）';
+      }
+    }, 500);
   });
 
   /* 切到后台自动松手，避免回来还在往前冲 */
