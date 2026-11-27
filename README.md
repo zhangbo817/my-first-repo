@@ -51,6 +51,8 @@ git push              # upload to GitHub
 | 第 30 关 | 虚空主宰 | 瞬移 + 螺旋弹幕 |
 | 最终 | 终焉·母舰 | 前六种技能全部登场（分三阶段解锁） |
 
+想看全部外形：打开 `game/game.html?gallery=1`（静态图鉴，见 `bosses.png`）。
+
 编译：双击 `build.bat`，或用 MinGW 执行 `gcc game.c -o game.exe`。
 （`*.exe` 已在 `.gitignore` 中忽略，编译产物不上传。）
 
